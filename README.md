@@ -178,9 +178,43 @@ npx serve .
 
 ## 部署
 
-已经部署在 GitHub Pages 上：**https://realchenchenluo.github.io/chishenme/**
+**GitHub Pages（已上线）**：https://realchenchenluo.github.io/chishenme/
 
-自己部署的话，把这几个文件推到仓库，然后在仓库 Settings → Pages 里选 `main` 分支根目录即可。也可以直接拖到 Vercel、Netlify、Cloudflare Pages 上，零配置。
+推送到 `main` 就会自动更新。自己部署的话，把这几个文件推到仓库，在仓库 Settings → Pages 里选 `main` 分支根目录即可。也可以直接拖到 Vercel、Netlify、Cloudflare Pages 上，零配置。
+
+### 部署到 Cloudflare Pages
+
+**先说清楚这么做能得到什么、得不到什么**，免得白折腾：
+
+| | GitHub Pages（现在用的） | Cloudflare Pages |
+| --- | --- | --- |
+| 链接名字 | `realchenchenluo.github.io/chishenme/`（带用户名） | `chishenme.pages.dev`（干净、短） |
+| 国内无代理能不能开 | 时好时坏 | **大概率更差**：`*.pages.dev` 据多方反馈被 DNS 污染 + SNI 阻断 |
+| 免费、静态托管 | 是 | 是 |
+
+如果目的是「**换一个不带用户名的短链接**」，Cloudflare Pages 能做到。如果目的是「**让国内同学更容易打开**」，换平台帮不上忙——被针对的是 `github.io` / `pages.dev` 这类**共享域名**，**唯一可靠的办法是绑一个自己的域名**（一年几十块），不管挂在哪家都行。
+
+> 别用我这台机器的测试结果判断可达性：这台机器所有流量都走 TUN 代理（`198.18.0.0/15` 假 IP 段），从这里测出来「能开」不代表别人不挂代理也能开。
+
+**启用方式一：GitHub Actions 自动部署（推荐）**
+
+1. 注册 [dash.cloudflare.com](https://dash.cloudflare.com)（免费），左侧 **Workers & Pages → Create → Pages → Upload assets**，项目名填 **`chishenme`**（必须和工作流里一致），先随便传个文件把项目建出来
+2. 右上角头像 → **My Profile → API Tokens → Create Token**，用模板 **Edit Cloudflare Workers** 或自定义权限，至少要有 **Cloudflare Pages: Edit**；拿到 Token 后还要在 Workers & Pages 概览页右侧找到 **Account ID**
+3. 到本仓库 **Settings → Secrets and variables → Actions**，加两个 secret：`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
+
+配好之后每次推送到 `main` 就会自动同步到 Cloudflare。**没配密钥时工作流会整体跳过，不会报错、不会留红叉**——但注意跳过的 job 在 GitHub 上仍显示 success，想看看到底跑没跑，要进日志找那行「未配置」。
+
+**启用方式二：本机一条命令**
+
+```bash
+npx wrangler login          # 第一次要授权，会开浏览器
+# 然后双击 一键部署到Cloudflare.bat，或者：
+node tools/deploy-cloudflare.mjs
+```
+
+两个方式发布的都是同一份产物（由 `tools/stage-site.mjs` 生成 `_site/`，这个站没有构建步骤，所谓「构建」就是挑文件）。
+
+**想换链接名字**：改两个地方保持一致——Cloudflare 上 Pages 项目名，以及 `.github/workflows/deploy-cloudflare.yml` 里的 `--project-name=`（若是用 .bat，还要改 `一键部署到Cloudflare.bat` 里的 `set PROJECT=`）。改完链接就是 `https://<新名字>.pages.dev`。
 
 ## 目录结构
 
@@ -188,6 +222,7 @@ npx serve .
 index.html               页面结构
 manifest.webmanifest     PWA 清单（可添加到主屏幕）
 icon.svg                 图标（也用作页面左上角的 logo，不是 emoji）
+一键部署到Cloudflare.bat  Windows 下双击即可部署到 Cloudflare Pages
 assets/data.js           内置菜品库（127 道参考数据，含字段说明）
 assets/geo.js            定位、109 城市离线表、高德逆地理与周边搜索、城市等级系数
 assets/coupons.js        优惠猎手页面抓取与解析
@@ -195,6 +230,9 @@ assets/app.js            全部逻辑：筛选、加权抽签、记录、编辑�
 assets/style.css         样式（移动端优先 + 深色模式）
 packs/                   校园菜单包：索引 index.json、各校数据、投稿说明 README.md
 tools/make-pack-szu.mjs  深大菜单包的转换脚本（可复现，方便核对改动）
+tools/stage-site.mjs     生成发布产物 _site/（GitHub Actions 与本地部署共用）
+tools/deploy-cloudflare.mjs  本机一键部署到 Cloudflare Pages
+.github/workflows/deploy-cloudflare.yml  可选：推送到 main 自动同步到 Cloudflare
 ```
 
 ## 参考与致谢

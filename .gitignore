@@ -1,0 +1,8 @@
+# 发布产物（由 tools/stage-site.mjs 生成，不要提交）
+_site/
+
+# 依赖与临时文件
+node_modules/
+*.log
+.DS_Store
+Thumbs.db

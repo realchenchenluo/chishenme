@@ -1,0 +1,74 @@
+name: 部署到 Cloudflare Pages
+
+# 这个工作流是【可选】的，和 GitHub Pages 并存。
+# 没配置 Cloudflare 密钥时它会整体跳过，不会失败、不会在 Actions 页面留红叉。
+# 启用方法见 README「部署到 Cloudflare」一节，三步，两分钟。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'icon.svg'
+      - 'manifest.webmanifest'
+      - 'assets/**'
+      - 'packs/**'
+      - '.github/workflows/deploy-cloudflare.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-pages
+  cancel-in-progress: false
+
+jobs:
+  # 密钥没配就跳过。注意：跳过的 job 在 GitHub 上仍显示 success，
+  # 想看看到底跑没跑，要进日志里找“未配置”那行。
+  precheck:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$ACCOUNT" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "未配置 CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID，跳过。"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "密钥已配置，开始部署。"
+          fi
+
+  deploy:
+    needs: precheck
+    if: needs.precheck.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 这个站没有构建步骤，只是把要发布的文件挑出来放进 _site
+      # （注意 packs/ 必须一起带上：应用运行时会去读 packs/index.json）
+      - name: 准备发布目录
+        run: node tools/stage-site.mjs
+
+      - name: 检查发布目录完整
+        run: |
+          for f in index.html assets/app.js assets/data.js assets/geo.js assets/coupons.js assets/style.css packs/index.json; do
+            test -s "_site/$f" || { echo "缺少 $_site/$f"; exit 1; }
+          done
+          echo "_site 文件数：$(find _site -type f | wc -l)"
+          echo "总大小：$(du -sh _site | cut -f1)"
+
+      - name: 推送到 Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # 项目名决定链接：chishenme → https://chishenme.pages.dev
+          # 想换链接名字就改这里，同时在 Cloudflare 上把 Pages 项目名改成一样的
+          command: pages deploy _site --project-name=chishenme
