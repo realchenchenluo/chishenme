@@ -2,7 +2,11 @@ name: 部署到 Cloudflare Pages
 
 # 这个工作流是【可选】的，和 GitHub Pages 并存。
 # 没配置 Cloudflare 密钥时它会整体跳过，不会失败、不会在 Actions 页面留红叉。
-# 启用方法见 README「部署到 Cloudflare」一节，三步，两分钟。
+#
+# 你只需要在仓库里配一个密钥：CLOUDFLARE_API_TOKEN
+#   Account ID 由工作流自己从 token 读出来；Pages 项目不存在时也会自己建。
+#   万一 token 没有账号读取权限，再补一个 CLOUDFLARE_ACCOUNT_ID 密钥即可。
+# 换链接名字：改下面两处 chishenme（project create 和 pages deploy 各一处）。
 
 on:
   push:
@@ -34,11 +38,10 @@ jobs:
       - id: check
         env:
           TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          if [ -z "$TOKEN" ] || [ -z "$ACCOUNT" ]; then
+          if [ -z "$TOKEN" ]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "未配置 CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID，跳过。"
+            echo "未配置 CLOUDFLARE_API_TOKEN，跳过。配置方法见 README「部署到 Cloudflare」。"
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
             echo "密钥已配置，开始部署。"
@@ -52,23 +55,47 @@ jobs:
       - uses: actions/checkout@v4
 
       # 这个站没有构建步骤，只是把要发布的文件挑出来放进 _site
-      # （注意 packs/ 必须一起带上：应用运行时会去读 packs/index.json）
+      # （packs/ 必须带上：应用运行时会去读 packs/index.json）
       - name: 准备发布目录
         run: node tools/stage-site.mjs
 
       - name: 检查发布目录完整
         run: |
           for f in index.html assets/app.js assets/data.js assets/geo.js assets/coupons.js assets/style.css packs/index.json; do
-            test -s "_site/$f" || { echo "缺少 $_site/$f"; exit 1; }
+            test -s "_site/$f" || { echo "缺少 _site/$f"; exit 1; }
           done
           echo "_site 文件数：$(find _site -type f | wc -l)"
           echo "总大小：$(du -sh _site | cut -f1)"
+
+      # 从 token 里读出 Account ID，省得你再手工配一个密钥
+      - name: 读取 Account ID
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          RESP=$(curl -s -H "Authorization: Bearer $TOKEN" https://api.cloudflare.com/client/v4/accounts || echo '{}')
+          ACC=$(printf '%s' "$RESP" | jq -r '.result[0].id // empty' 2>/dev/null || true)
+          if [ -n "$ACC" ]; then
+            echo "CF_ACCOUNT_ID=$ACC" >> "$GITHUB_ENV"
+            echo "已从 token 读到 Account ID。"
+          else
+            echo "读不到账号列表：token 可能缺少「Account Settings: Read」权限。"
+            echo "如果下一步报 accountId 缺失，就去仓库再加一个 CLOUDFLARE_ACCOUNT_ID 密钥"
+            echo "（值在 Cloudflare 的 Workers & Pages 概览页右侧）。"
+          fi
+
+      # 项目不存在时建出来；已存在会报错，忽略即可
+      - name: 确保 Pages 项目存在
+        continue-on-error: true
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ env.CF_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages project create chishenme --production-branch=main
 
       - name: 推送到 Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          accountId: ${{ env.CF_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
           # 项目名决定链接：chishenme → https://chishenme.pages.dev
-          # 想换链接名字就改这里，同时在 Cloudflare 上把 Pages 项目名改成一样的
           command: pages deploy _site --project-name=chishenme

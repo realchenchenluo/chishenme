@@ -196,25 +196,20 @@ npx serve .
 
 > 别用我这台机器的测试结果判断可达性：这台机器所有流量都走 TUN 代理（`198.18.0.0/15` 假 IP 段），从这里测出来「能开」不代表别人不挂代理也能开。
 
-**启用方式一：GitHub Actions 自动部署（推荐）**
+**启用方式：配一个密钥就行**
 
-1. 注册 [dash.cloudflare.com](https://dash.cloudflare.com)（免费），左侧 **Workers & Pages → Create → Pages → Upload assets**，项目名填 **`chishenme`**（必须和工作流里一致），先随便传个文件把项目建出来
-2. 右上角头像 → **My Profile → API Tokens → Create Token**，用模板 **Edit Cloudflare Workers** 或自定义权限，至少要有 **Cloudflare Pages: Edit**；拿到 Token 后还要在 Workers & Pages 概览页右侧找到 **Account ID**
-3. 到本仓库 **Settings → Secrets and variables → Actions**，加两个 secret：`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
+1. 右上角头像 → **My Profile → API Tokens → Create Token**，权限选 **Account → Cloudflare Pages → Edit**，建议再加一条 **Account → Account Settings → Read**（有它工作流就能自己读出 Account ID，你少填一个密钥）
+   - 也可以直接用 **Edit Cloudflare Workers** 模板，它一并含了 Pages 权限
+   - **token 值只在创建那一刻显示一次**，记得当场复制；错过了就点那一行的 ⋯ → Roll 重新生成（旧值立即失效）
+2. 到本仓库 **Settings → Secrets and variables → Actions** 加一个 secret：`CLOUDFLARE_API_TOKEN`，值就粘贴上面那个 token
+3. 完成。推送到 `main` 就会自动同步；Pages 项目不存在时工作流会自己建（`pages project create`），链接随即变成 `https://chishenme.pages.dev`
+   - 如果 token 没给「Account Settings: Read」权限，工作流读不到账号，这时再补一个 `CLOUDFLARE_ACCOUNT_ID` 密钥即可（值在 Cloudflare 的 **Workers & Pages** 概览页右侧）
 
-配好之后每次推送到 `main` 就会自动同步到 Cloudflare。**没配密钥时工作流会整体跳过，不会报错、不会留红叉**——但注意跳过的 job 在 GitHub 上仍显示 success，想看看到底跑没跑，要进日志找那行「未配置」。
+**没配密钥时工作流会整体跳过，不会报错、不会留红叉**——但注意跳过的 job 在 GitHub 上仍显示 success，想看看到底跑没跑，要进日志找那行「未配置」。
 
-**启用方式二：本机一条命令**
+发布的产物由 `tools/stage-site.mjs` 生成 `_site/`（这个站没有构建步骤，所谓「构建」就是挑文件），GitHub Pages 和 Cloudflare 用的是同一份。
 
-```bash
-npx wrangler login          # 第一次要授权，会开浏览器
-# 然后双击 一键部署到Cloudflare.bat，或者：
-node tools/deploy-cloudflare.mjs
-```
-
-两个方式发布的都是同一份产物（由 `tools/stage-site.mjs` 生成 `_site/`，这个站没有构建步骤，所谓「构建」就是挑文件）。
-
-**想换链接名字**：改两个地方保持一致——Cloudflare 上 Pages 项目名，以及 `.github/workflows/deploy-cloudflare.yml` 里的 `--project-name=`（若是用 .bat，还要改 `一键部署到Cloudflare.bat` 里的 `set PROJECT=`）。改完链接就是 `https://<新名字>.pages.dev`。
+**想换链接名字**：Cloudflare 上把 Pages 项目改名，再把 `.github/workflows/deploy-cloudflare.yml` 里两处 `chishenme`（`project create` 和 `pages deploy`）改成同一个名字，链接就是 `https://<新名字>.pages.dev`。
 
 ## 目录结构
 
@@ -222,7 +217,6 @@ node tools/deploy-cloudflare.mjs
 index.html               页面结构
 manifest.webmanifest     PWA 清单（可添加到主屏幕）
 icon.svg                 图标（也用作页面左上角的 logo，不是 emoji）
-一键部署到Cloudflare.bat  Windows 下双击即可部署到 Cloudflare Pages
 assets/data.js           内置菜品库（127 道参考数据，含字段说明）
 assets/geo.js            定位、109 城市离线表、高德逆地理与周边搜索、城市等级系数
 assets/coupons.js        优惠猎手页面抓取与解析
@@ -230,9 +224,8 @@ assets/app.js            全部逻辑：筛选、加权抽签、记录、编辑�
 assets/style.css         样式（移动端优先 + 深色模式）
 packs/                   校园菜单包：索引 index.json、各校数据、投稿说明 README.md
 tools/make-pack-szu.mjs  深大菜单包的转换脚本（可复现，方便核对改动）
-tools/stage-site.mjs     生成发布产物 _site/（GitHub Actions 与本地部署共用）
-tools/deploy-cloudflare.mjs  本机一键部署到 Cloudflare Pages
-.github/workflows/deploy-cloudflare.yml  可选：推送到 main 自动同步到 Cloudflare
+tools/stage-site.mjs     生成发布产物 _site/（GitHub Pages 与 Cloudflare 共用）
+.github/workflows/deploy-cloudflare.yml  可选：配了 token 后推送到 main 即自动同步到 Cloudflare
 ```
 
 ## 参考与致谢
