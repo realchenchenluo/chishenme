@@ -289,6 +289,17 @@ input[type="range"] { accent-color: var(--brand); width: 100%; }
 .tabbar button .ico { width: 22px; height: 22px; display: block; }
 .tabbar button.on { color: var(--brand); font-weight: 600; background: var(--brand-soft); }
 
+/* ---------- 页脚（致谢） ---------- */
+.footer {
+  text-align: center;
+  padding: 20px 8px 6px;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+.footer p { margin: 0; }
+.footer b { color: var(--ink-2); font-weight: 600; letter-spacing: .2px; }
+
 /* ---------- 提示条 ---------- */
 #toast {
   position: fixed; left: 50%; bottom: calc(var(--tab-h) + 26px + env(safe-area-inset-bottom));
