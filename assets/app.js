@@ -1080,7 +1080,12 @@
         added++;
       });
       save(); close(); renderMe(); renderFilters(); renderPick();
-      toast(added ? '导入了 ' + added + ' 个菜' : '没认出任何菜名，检查一下格式');
+      // 外卖场景多说一句：内置的那些只是通用品牌，想只抽自己录的真实店，一个开关的事
+      if (added && p === 'takeout' && !S.filters.onlyMine) {
+        toast('已录入 ' + added + ' 家店。想只抽自己录的，去「我的」打开「只抽本校/我自己的菜单」');
+      } else {
+        toast(added ? '导入了 ' + added + ' 个菜' : '没认出任何菜名，检查一下格式');
+      }
     };
   }
 
