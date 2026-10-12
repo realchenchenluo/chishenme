@@ -1207,7 +1207,7 @@
       '<label class="switch"><input type="checkbox" id="adjChk"' + (S.cityAdjust ? ' checked' : '') + '>' +
       '<span class="track"></span><span class="thumb"></span></label></div>' +
       '<div class="frow" style="margin-top:12px"><div class="flabel"><span>周边搜索半径</span></div>' +
-      '<div class="chips" id="radiusChips">' +
+      '<div class="chips wrap" id="radiusChips">' +
       [500, 1000, 2000, 3000, 5000].map((r) =>
         '<button class="pill' + (S.radius === r ? ' on' : '') + '" data-r="' + r + '">' + radiusLabel(r) + '</button>').join('') +
       '</div></div>' +
