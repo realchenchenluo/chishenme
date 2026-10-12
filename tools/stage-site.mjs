@@ -19,7 +19,7 @@ const OUT = path.join(ROOT, '_site');
 // 要发布的文件。packs/ 必须带上：应用运行时会 fetch ./packs/index.json
 // school.json 标明本站服务哪所学校、默认载入哪个本校菜单包
 // _headers 是 Cloudflare Pages 的安全响应头（GitHub Pages 会忽略它，无副作用）
-const INCLUDE_FILES = ['index.html', 'icon.svg', 'manifest.webmanifest', '_headers', 'school.json'];
+const INCLUDE_FILES = ['index.html', 'icon.svg', 'manifest.webmanifest', '_headers', 'school.json', 'robots.txt'];
 const INCLUDE_DIRS = ['assets', 'packs'];
 
 function copyFile(src, dest) {

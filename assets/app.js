@@ -70,7 +70,8 @@
     radius: 2000,    // 周边搜索半径（米）
     cityAdjust: true,// 按城市等级微调外卖价与配送时长（估算值，可关）
     couponUrl: '',   // 优惠猎手页面地址，留空用默认
-    schoolLoaded: '' // 已自动载入过哪个本校菜单包（避免每次打开都重复导入）
+    schoolLoaded: '',// 已自动载入过哪个本校菜单包（避免每次打开都重复导入）
+    geoShare: true   // 定位后是否把坐标发给地理服务认城市（关掉则坐标不出设备）
   };
 
   let S = load();
@@ -1134,7 +1135,16 @@
     try {
       const pos = await GEO.getPosition();
       S.loc = Object.assign({}, S.loc, { lat: pos.lat, lon: pos.lon, acc: pos.acc, ts: Date.now() });
-      const info = await GEO.reverseGeocode(pos.lat, pos.lon, amapKeyOf());
+      let info = null;
+      if (S.geoShare === false) {
+        // 用户选择不让坐标出设备：只用内置城市表在本地判断，不发任何网络请求
+        const near = GEO.nearestCity(pos.lat, pos.lon);
+        info = (near && near.km <= 200)
+          ? { city: near.city, province: near.province, tier: near.tier, district: '', addr: '', source: '内置城市表（坐标未联网）' }
+          : null;
+      } else {
+        info = await GEO.reverseGeocode(pos.lat, pos.lon, amapKeyOf());
+      }
       if (info) {
         S.loc = Object.assign(S.loc, info);
         save();
@@ -1358,6 +1368,11 @@
       (key ? '<button class="btn tiny ghost" id="amapClearBtn">删除 Key</button>' : '') +
       '</div>' +
       '<p class="hint">自己填的 Key 只存在这台设备的浏览器里，搜索只在你点按钮时发生。</p>' +
+      '<div class="switchrow"><div>' +
+      '<div class="sr-label">定位时把坐标发给地理服务认城市</div>' +
+      '<div class="sr-desc">关掉后只用内置的 109 城市表在本地判断，坐标一步都不出你的设备（城市名会粗一点）</div></div>' +
+      '<label class="switch"><input type="checkbox" id="geoShareChk"' + (S.geoShare !== false ? ' checked' : '') + '>' +
+      '<span class="track"></span><span class="thumb"></span></label></div>' +
       '<div class="switchrow" style="margin-top:10px"><div>' +
       '<div class="sr-label">按城市等级微调外卖价和配送时长</div>' +
       '<div class="sr-desc">只有一线和新一线会上调（基础数据本来就是按二三线估的），其他城市用原值</div></div>' +
@@ -1398,6 +1413,12 @@
     $('#adjChk', box).onchange = (ev) => {
       S.cityAdjust = ev.target.checked; save(); renderLoc(); renderLocSettings(); renderPick();
       toast(ev.target.checked ? '已开启城市估算微调' : '已关闭，外卖数字回到基础参考值');
+    };
+    $('#geoShareChk', box).onchange = (ev) => {
+      S.geoShare = ev.target.checked; save(); renderLocSettings();
+      toast(ev.target.checked
+        ? '定位后会把坐标发给地理服务认城市'
+        : '已关闭：定位只在本机判断城市，坐标不再发给任何第三方');
     };
     $$('#radiusChips .pill', box).forEach((b) => {
       b.onclick = () => { S.radius = parseInt(b.dataset.r, 10); save(); renderLocSettings(); };

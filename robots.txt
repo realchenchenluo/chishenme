@@ -1,0 +1,28 @@
+# 本站是校内自用的小工具，不希望被搜索引擎收录，也不希望被爬虫抓取。
+# 说明：robots.txt 是「礼貌请求」，守规矩的爬虫会遵守，恶意抓取者不会。
+# 真正能拦住人的是 Cloudflare Access 门禁（见 SECURITY.md）。
+
+User-agent: *
+Disallow: /
+
+# 顺手明确拒绝几个常见的 AI 抓取器（同样是礼貌请求）
+User-agent: GPTBot
+Disallow: /
+User-agent: ClaudeBot
+Disallow: /
+User-agent: Claude-Web
+Disallow: /
+User-agent: Google-Extended
+Disallow: /
+User-agent: Applebot-Extended
+Disallow: /
+User-agent: Bytespider
+Disallow: /
+User-agent: CCBot
+Disallow: /
+User-agent: Amazonbot
+Disallow: /
+User-agent: PerplexityBot
+Disallow: /
+User-agent: meta-externalagent
+Disallow: /

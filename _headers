@@ -10,6 +10,7 @@
   X-Frame-Options: DENY
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
+  X-Robots-Tag: noindex, nofollow, noarchive, noimageindex
 
 # 静态资源缓存 10 分钟：既减轻回源，也不至于让改版后大家一天都拿不到新版 JS。
 # （之前设成 1 天，实测会让回访者拿到「新 HTML + 旧 JS」，这里改短并强制校验。）
