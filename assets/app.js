@@ -63,7 +63,12 @@
     likes: {}, dislikes: {},
     dark: null,      // null=跟随系统
     meal: null,
-    mealDay: null    // 手动选餐段所属日期
+    mealDay: null,   // 手动选餐段所属日期
+    loc: null,       // 定位结果 {city, province, tier, district, lat, lon, source, ts}
+    amapKey: '',     // 你自己的高德「Web服务」Key，只存本机
+    radius: 2000,    // 周边搜索半径（米）
+    cityAdjust: true,// 按城市等级微调外卖价与配送时长（估算值，可关）
+    couponUrl: ''    // 优惠猎手页面地址，留空用默认
   };
 
   let S = load();
@@ -97,11 +102,29 @@
   function byId(id) { return allDishes().find((d) => d.id === id) || null; }
 
   // 这道菜可选的「方案」：食堂方案 / 外卖方案
+  // 外卖方案会按所在城市等级做小幅估算修正（可在设置里关掉）
+  function cityFactor() {
+    if (!S.cityAdjust || !S.loc || !S.loc.tier) return null;
+    return (window.GEO && GEO.TIER_FACTOR[S.loc.tier]) || null;
+  }
+  function scaleRange(range, k) {
+    if (!k || k === 1) return range;
+    const lo = Math.max(1, Math.round(range[0] * k));
+    return [lo, Math.max(lo + 1, Math.round(range[1] * k))];
+  }
   function offers(d) {
     const out = [];
     if (d.p === 'canteen' || d.p === 'both') out.push({ place: 'canteen', price: d.price || [10, 15], wait: d.wait || [5, 10] });
     if (d.p === 'takeout' || d.p === 'both') {
-      out.push({ place: 'takeout', price: d.tp || d.price || [15, 25], wait: d.tw || d.wait || [30, 45] });
+      const f = cityFactor();
+      const price = d.tp || d.price || [15, 25];
+      const wait = d.tw || d.wait || [30, 45];
+      out.push({
+        place: 'takeout',
+        price: f ? scaleRange(price, f.price) : price,
+        wait: f ? scaleRange(wait, f.wait) : wait,
+        adjusted: !!f
+      });
     }
     return out;
   }
@@ -256,13 +279,14 @@
 
   function poolSummary() {
     const pool = buildPool(false);
-    if (!pool.length) return '当前条件下没有候选，往下滑放宽一点试试';
+    const head = S.loc && S.loc.city ? '📍' + S.loc.city + ' · ' : '';
+    if (!pool.length) return head + '当前条件下没有候选，往下滑放宽一点试试';
     const c = pool.filter((x) => x.offer.place === 'canteen').length;
     const t = pool.length - c;
     const parts = [];
     if (c) parts.push('食堂 ' + c);
     if (t) parts.push('外卖 ' + t);
-    return '当前 ' + pool.length + ' 个候选（' + parts.join(' · ') + '）';
+    return head + '当前 ' + pool.length + ' 个候选（' + parts.join(' · ') + '）';
   }
 
   function doRoll(isAgain) {
@@ -323,10 +347,14 @@
       (d.d ? '<p class="desc">' + d.d + '</p>' : '') +
       '<div class="why">抽中理由：' + whyText(d, o, buildPool(false)) + '</div>' +
       (altTxt ? '<div class="alt">' + altTxt + '</div>' : '') +
+      (o.place === 'takeout' && o.adjusted
+        ? '<div class="alt">外卖价和配送时长按「' + ((S.loc && GEO.TIER_LABEL[S.loc.tier]) || '本地') + '」估算过，不是真实报价</div>'
+        : '') +
       '</div>';
     resultBox.hidden = false;
     $('#resultActions').hidden = false;
     $('#resultActions2').hidden = false;
+    $('#couponBtn').hidden = o.place !== 'takeout';   // 抽到外卖才提示领券
     $('#rollBtn').textContent = '🎲 再抽一次';
     $('#rollBtn').disabled = false;
     $('#poolInfo').textContent = poolSummary();
@@ -847,7 +875,12 @@
 
   /* ---------- 导入导出 ---------- */
   function exportData() {
-    const payload = { v: 1, at: new Date().toISOString(), custom: S.custom, patches: S.patches, blacklist: S.blacklist, diet: S.diet, filters: S.filters };
+    const payload = {
+      v: 1, at: new Date().toISOString(),
+      // 带上城市信息方便同学判断这份菜单适不适合自己用，但不含坐标
+      region: S.loc ? { city: S.loc.city, district: S.loc.district || '', tier: S.loc.tier || 0 } : null,
+      custom: S.custom, patches: S.patches, blacklist: S.blacklist, diet: S.diet, filters: S.filters
+    };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -907,6 +940,373 @@
         save(); close(); renderMe(); renderFilters(); renderPick();
         toast('导入完成，共 ' + n + ' 个菜品');
       } catch (e) { toast('JSON 解析失败，检查一下内容'); }
+    };
+  }
+
+  /* ================= 通用弹层与复制 ================= */
+  function openSheet(title, bodyHTML, onMount) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;inset:0;z-index:70;background:rgba(20,12,8,.5);display:flex;align-items:flex-end;justify-content:center';
+    wrap.innerHTML =
+      '<div style="background:var(--card);width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom));border:1px solid var(--line)">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">' +
+      '<h2 style="margin:0;font-size:16px">' + title + '</h2>' +
+      '<button class="btn tiny ghost" data-close>关闭</button></div>' +
+      bodyHTML + '</div>';
+    document.body.appendChild(wrap);
+    document.body.style.overflow = 'hidden';
+    const close = () => { wrap.remove(); document.body.style.overflow = ''; };
+    $('[data-close]', wrap).onclick = close;
+    wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
+    if (onMount) onMount(wrap, close);
+    return { wrap: wrap, close: close };
+  }
+
+  async function copyText(txt, okMsg) {
+    try { await navigator.clipboard.writeText(txt); toast(okMsg || '已复制'); return; }
+    catch (e) { /* 降级 */ }
+    const ta = document.createElement('textarea');
+    ta.value = txt;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); toast(okMsg || '已复制'); }
+    catch (e2) { prompt('手动复制：', txt); }
+    ta.remove();
+  }
+
+  function fmtDist(m) {
+    if (!m) return '';
+    return m < 1000 ? m + ' 米' : (Math.round(m / 100) / 10) + ' 公里';
+  }
+
+  /* ================= 定位与本地化 ================= */
+  function locLabel() {
+    const L = S.loc;
+    if (!L || !L.city) return '还没定位';
+    const t = L.tier ? '（' + (GEO.TIER_LABEL[L.tier] || '等级未知') + '）' : '';
+    return '📍 ' + L.city + (L.district ? ' · ' + L.district : '') + t;
+  }
+  function importedCount() {
+    return S.custom.filter((c) => c.from === 'gaode').length;
+  }
+  function radiusLabel(r) {
+    r = r || S.radius;
+    return r >= 1000 ? (r / 1000) + ' 公里' : r + ' 米';
+  }
+
+  async function doLocate() {
+    if (!window.GEO) { toast('定位模块没加载出来'); return; }
+    toast('正在定位，手机上会弹权限框…');
+    try {
+      const pos = await GEO.getPosition();
+      S.loc = Object.assign({}, S.loc, { lat: pos.lat, lon: pos.lon, acc: pos.acc, ts: Date.now() });
+      const info = await GEO.reverseGeocode(pos.lat, pos.lon, (S.amapKey || '').trim());
+      if (info) {
+        S.loc = Object.assign(S.loc, info);
+        save();
+        toast('你在 ' + info.city + '（' + info.source + '）');
+      } else {
+        save();
+        toast('拿到位置了，但没认出来是哪个城市，手动选一下吧');
+      }
+    } catch (e) {
+      toast(e.message || '定位失败');
+    }
+    renderLoc(); renderLocSettings(); renderPick();
+  }
+
+  function openCityPicker() {
+    const cur = S.loc && S.loc.city ? S.loc.city : '';
+    const opts = GEO.CITIES.map((c) =>
+      '<option value="' + c[0] + '"' + (c[0] === cur ? ' selected' : '') + '>' + c[1] + ' · ' + c[0] + '</option>').join('');
+    openSheet('手动选城市',
+      '<p class="hint" style="margin-top:0">GPS 在宿舍里容易飘，或者你不想给定位权限，那就直接选。选了之后同样会按该城市的水平估算外卖价和配送时长。</p>' +
+      '<label class="field"><span class="fl">我在的城市</span><select id="citySel">' + opts + '</select></label>' +
+      '<div class="actions-2"><button class="btn" id="cityCancel">取消</button>' +
+      '<button class="btn primary" id="cityOk">就这个</button></div>',
+      (wrap, close) => {
+        $('#cityCancel', wrap).onclick = close;
+        $('#cityOk', wrap).onclick = () => {
+          const name = $('#citySel', wrap).value;
+          const info = GEO.findCity(name);
+          if (info) {
+            S.loc = { city: info.city, province: info.province, tier: info.tier, district: '', addr: '', source: '手动选择', ts: Date.now() };
+            save(); close(); renderLoc(); renderLocSettings(); renderPick();
+            toast('已设为 ' + info.city + '（' + (GEO.TIER_LABEL[info.tier] || '') + '）');
+          }
+        };
+      });
+  }
+
+  function openAmapHelp() {
+    openSheet('免费申请一个高德 Key',
+      '<ol style="padding-left:18px;margin:0;font-size:13.5px;line-height:2">' +
+      '<li>打开 <a href="https://console.amap.com/dev/key/app" target="_blank" rel="noopener">高德开放平台控制台</a>，手机号注册并完成实名认证（个人开发者免费）。</li>' +
+      '<li>「应用管理 → 我的应用 → 创建新应用」，名字随便填。</li>' +
+      '<li>点「添加 Key」，<b>服务平台必须选「Web服务」</b>。选成「Web端(JS API)」会报 USERKEY_PLAT_NOMATCH。</li>' +
+      '<li>把生成的 Key 复制回来，粘到「定位与本地数据」里保存即可。</li>' +
+      '</ol>' +
+      '<p class="hint">个人开发者的每日免费额度对个人用完全够。只有你点「搜周边」时才会调一次，不会后台偷偷请求。Key 只存在这台设备上。</p>');
+  }
+
+  // 搜索用的锚点：有精确定位就用精确定位，手动选城市的情况退而用市中心，
+  // 并且会在界面上说明用的是哪个，避免把「市中心 5 公里」当成「我附近 5 公里」
+  function searchAnchor() {
+    if (S.loc && S.loc.lat) return { lat: S.loc.lat, lon: S.loc.lon, src: '你定位的位置', exact: true };
+    const c = S.loc && S.loc.city ? GEO.findCity(S.loc.city) : null;
+    if (c) return { lat: c.lat, lon: c.lon, src: c.city + ' 市中心', exact: false };
+    return null;
+  }
+
+  function openNearby() {
+    const key = (S.amapKey || '').trim();
+    if (!key) {
+      openSheet('先配一个高德 Key',
+        '<p class="hint" style="margin-top:0">搜周边真实餐厅要走高德的地图服务，需要一个免费 Key，配一次就行。没有 Key 也能用，只是搜不到真实店铺。</p>' +
+        '<div class="actions-2"><button class="btn primary" id="goSet">去填 Key</button>' +
+        '<button class="btn" id="howKey">怎么申请</button></div>',
+        (wrap, close) => {
+          $('#howKey', wrap).onclick = () => { close(); openAmapHelp(); };
+          $('#goSet', wrap).onclick = () => {
+            close(); switchTab('me');
+            setTimeout(() => { const el = $('#locSettings'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80);
+          };
+        });
+      return;
+    }
+    const anchor = searchAnchor();
+    if (!anchor) {
+      toast('先定位一下（或者手动选城市）再搜周边');
+      doLocate().then(() => { if (searchAnchor()) openNearby(); });
+      return;
+    }
+
+    let results = [];
+    openSheet('周边吃的 · ' + (S.loc && S.loc.city ? S.loc.city : '当前位置'),
+      '<p class="hint" style="margin-top:0">以「' + esc(anchor.src) + '」为圆心，半径 ' + radiusLabel() + '，按直线距离排序。' +
+      (anchor.exact ? '' : '<b>这不是你的实时位置</b>，搜出来的店可能离你较远；想让结果更准就先去定位。') +
+      '评分和人均是高德地图的数据，<b>不是美团/大众点评的</b>，导入后可以自己改。</p>' +
+      '<div class="actions-2"><button class="btn primary wide" id="nbGo">🔍 开始搜索</button></div>' +
+      '<div id="nbList" class="list" style="margin-top:10px"></div>' +
+      '<div id="nbBox" hidden>' +
+      '<label class="field" style="margin-top:10px"><span class="fl">这些店算哪种渠道</span><select id="nbPlace">' +
+      '<option value="takeout">外卖</option><option value="canteen">食堂 / 校内</option><option value="both">两边都有</option></select></label>' +
+      '<button class="btn primary wide" id="nbImport">加入我的菜单</button></div>',
+      (wrap, close) => {
+        $('#nbGo', wrap).onclick = async () => {
+          const btn = $('#nbGo', wrap);
+          btn.disabled = true;
+          btn.textContent = '搜索中…';
+          $('#nbList', wrap).innerHTML = '';
+          try {
+            results = await GEO.searchNearby(anchor.lat, anchor.lon, key, S.radius);
+          } catch (e) {
+            results = [];
+            $('#nbList', wrap).innerHTML = '<p class="hint">' + esc(e.message || '搜索失败') + '</p>';
+          }
+          btn.disabled = false;
+          btn.textContent = '🔍 再搜一次';
+          if (!results.length) {
+            if (!$('#nbList', wrap).innerHTML) {
+              $('#nbList', wrap).innerHTML = '<p class="hint">这个半径里没搜到餐饮店。可以把半径调大一点再试（半径在「我的 → 定位与本地数据」里改）。</p>';
+            }
+            return;
+          }
+          const picked = new Set(results.map((p) => p.id));
+          const list = $('#nbList', wrap);
+          list.innerHTML = '';
+          results.forEach((p) => {
+            const row = document.createElement('div');
+            row.className = 'item';
+            row.innerHTML =
+              '<input type="checkbox" checked style="width:20px;height:20px;min-height:auto;flex:0 0 auto">' +
+              '<div class="grow"><div class="name">' + esc(p.name) + '</div>' +
+              '<div class="sub2">' + esc([p.typeText, fmtDist(p.distance), p.address].filter(Boolean).join(' · ')) + '</div></div>' +
+              '<div class="right">' + (p.rating ? '★' + p.rating : '无评分') + (p.cost ? '<br>约 ¥' + p.cost : '') + '</div>';
+            const cb = row.querySelector('input');
+            cb.onchange = () => { if (cb.checked) picked.add(p.id); else picked.delete(p.id); };
+            list.appendChild(row);
+          });
+          const box = $('#nbBox', wrap);
+          box.hidden = false;
+          $('#nbImport', wrap).textContent = '把这 ' + picked.size + ' 家加入我的菜单';
+          $('#nbImport', wrap).onclick = () => {
+            const place = $('#nbPlace', wrap).value;
+            let added = 0;
+            results.filter((p) => picked.has(p.id)).forEach((p) => {
+              const dish = GEO.poiToDish(p, place);
+              const exist = S.custom.find((x) => x.n === dish.n);
+              if (exist) Object.assign(exist, dish); else S.custom.push(dish);
+              added++;
+            });
+            save(); close(); renderMe(); renderLoc(); renderPick();
+            toast('导入了 ' + added + ' 家店，抽签已经能用它们了');
+          };
+        };
+      });
+  }
+
+  function renderLoc() {
+    const box = $('#locBody');
+    if (!box) return;
+    const L = S.loc;
+    const f = cityFactor();
+    const sub = $('#locSub');
+    if (sub) sub.textContent = L && L.city ? L.city : '';
+    if (!L) {
+      box.innerHTML =
+        '<p class="hint" style="margin-top:0">定位后可以：按你所在城市估算外卖价和配送时长；配一个免费的高德 Key，还能搜出你周边的真实餐厅一键加进菜单。</p>' +
+        '<div class="actions-2" style="margin-top:0"><button class="btn primary" id="locBtn">📍 用当前位置</button>' +
+        '<button class="btn" id="cityBtn">手动选城市</button>' +
+        '<button class="btn" id="nearbyBtn">🔍 找周边吃的</button></div>';
+    } else {
+      box.innerHTML =
+        '<div class="item" style="border:0;padding:0 0 8px"><div class="grow">' +
+        '<div class="name">' + locLabel() + '</div>' +
+        '<div class="sub2">' + esc([L.province, L.source ? '来自' + L.source : '', L.acc ? '精度约 ' + L.acc + ' 米' : ''].filter(Boolean).join(' · ')) + '</div>' +
+        '</div></div>' +
+        (f ? '<p class="hint" style="margin:0 0 8px">外卖价 ×' + f.price + '、配送时长 ×' + f.wait +
+          '（按「' + (GEO.TIER_LABEL[L.tier] || '') + '」估算，不是真实报价，可关）</p>' : '') +
+        (importedCount() ? '<p class="hint" style="margin:0 0 8px">已导入 ' + importedCount() + ' 家周边店铺</p>' : '') +
+        '<div class="actions-2" style="margin-top:0"><button class="btn primary" id="nearbyBtn">🔍 找周边吃的</button>' +
+        '<button class="btn" id="locBtn">重新定位</button>' +
+        '<button class="btn" id="cityBtn">改城市</button></div>';
+    }
+    const lb = $('#locBtn', box); if (lb) lb.onclick = () => doLocate();
+    const nb = $('#nearbyBtn', box); if (nb) nb.onclick = () => openNearby();
+    const cb = $('#cityBtn', box); if (cb) cb.onclick = () => openCityPicker();
+  }
+
+  function renderLocSettings() {
+    const box = $('#locSettings');
+    if (!box) return;
+    const L = S.loc;
+    const key = (S.amapKey || '').trim();
+    box.innerHTML =
+      '<div class="item" style="border:0;padding:0 0 8px"><div class="grow">' +
+      '<div class="name">' + locLabel() + '</div>' +
+      '<div class="sub2">' + (L && L.addr ? esc(L.addr)
+        : (L && L.lat ? '坐标 ' + L.lat + ', ' + L.lon + '（截断到约 100 米精度）' : '定位只用来判断城市，坐标不上传任何服务器——这个网站没有服务器')) + '</div>' +
+      '</div></div>' +
+      '<div class="actions-2" style="margin:0 0 12px">' +
+      '<button class="btn tiny" id="setLocBtn">📍 定位</button>' +
+      '<button class="btn tiny" id="setCityBtn">手动选城市</button>' +
+      (L ? '<button class="btn tiny danger" id="clearLocBtn">清除定位</button>' : '') +
+      '</div>' +
+      '<h2 style="margin:14px 0 8px;font-size:13px">高德「Web服务」Key <span class="sub">可选，用来搜周边真实餐厅</span></h2>' +
+      '<label class="field" style="margin-bottom:8px"><input type="text" id="amapInput" placeholder="粘贴你的 Key（32 位字符）" value="' + esc(key) + '"></label>' +
+      '<div class="actions-2" style="margin-top:0">' +
+      '<button class="btn tiny primary" id="amapSaveBtn">保存并验证</button>' +
+      '<button class="btn tiny" id="amapHelpBtn">怎么免费申请</button>' +
+      (key ? '<button class="btn tiny ghost" id="amapClearBtn">删除 Key</button>' : '') +
+      '</div>' +
+      '<p class="hint">Key 只存在这台设备的浏览器里。搜索只在你点按钮时发生。</p>' +
+      '<div class="switchrow" style="margin-top:10px"><div>' +
+      '<div class="sr-label">按城市等级微调外卖价和配送时长</div>' +
+      '<div class="sr-desc">只有一线和新一线会上调（基础数据本来就是按二三线估的），其他城市用原值</div></div>' +
+      '<label class="switch"><input type="checkbox" id="adjChk"' + (S.cityAdjust ? ' checked' : '') + '>' +
+      '<span class="track"></span><span class="thumb"></span></label></div>' +
+      '<div class="frow" style="margin-top:12px"><div class="flabel"><span>周边搜索半径</span></div>' +
+      '<div class="chips" id="radiusChips">' +
+      [500, 1000, 2000, 3000, 5000].map((r) =>
+        '<button class="pill' + (S.radius === r ? ' on' : '') + '" data-r="' + r + '">' + radiusLabel(r) + '</button>').join('') +
+      '</div></div>' +
+      '<div class="actions-2" style="margin-top:0"><button class="btn tiny primary" id="nearbyBtn2">🔍 现在搜一次周边餐饮</button></div>';
+
+    $('#setLocBtn', box).onclick = () => doLocate();
+    $('#setCityBtn', box).onclick = () => openCityPicker();
+    if ($('#clearLocBtn', box)) $('#clearLocBtn', box).onclick = () => {
+      S.loc = null; save(); renderLoc(); renderLocSettings(); renderPick(); toast('已清除定位');
+    };
+    $('#amapHelpBtn', box).onclick = () => openAmapHelp();
+    if ($('#amapClearBtn', box)) $('#amapClearBtn', box).onclick = () => {
+      S.amapKey = ''; save(); renderLocSettings(); toast('Key 已删除');
+    };
+    $('#amapSaveBtn', box).onclick = async () => {
+      const v = $('#amapInput', box).value.trim();
+      if (!v) { toast('先粘贴 Key'); return; }
+      const btn = $('#amapSaveBtn', box);
+      btn.disabled = true; btn.textContent = '验证中…';
+      try {
+        await GEO.verifyKey(v);
+        S.amapKey = v; save(); renderLocSettings();
+        toast('Key 可用，去「找周边吃的」搜一下');
+      } catch (e) {
+        btn.disabled = false; btn.textContent = '保存并验证';
+        toast(e.message || '验证失败');
+        return;
+      }
+      btn.disabled = false;
+    };
+    $('#adjChk', box).onchange = (ev) => {
+      S.cityAdjust = ev.target.checked; save(); renderLoc(); renderLocSettings(); renderPick();
+      toast(ev.target.checked ? '已开启城市估算微调' : '已关闭，外卖数字回到基础参考值');
+    };
+    $$('#radiusChips .pill', box).forEach((b) => {
+      b.onclick = () => { S.radius = parseInt(b.dataset.r, 10); save(); renderLocSettings(); };
+    });
+    const nb2 = $('#nearbyBtn2', box);
+    if (nb2) nb2.onclick = () => openNearby();
+  }
+
+  /* ================= 外卖券（联合优惠猎手）================= */
+  function couponUrl() {
+    return (S.couponUrl || '').trim() || (window.COUPONS ? COUPONS.DEFAULT_URL : '');
+  }
+
+  function couponRow(c) {
+    const row = document.createElement('div');
+    row.className = 'item';
+    row.innerHTML =
+      '<div class="grow"><div class="name">' + esc(c.title) + '</div>' +
+      '<div class="sub2">' + esc([c.platform, c.discount, c.badge, c.valid].filter(Boolean).join(' · ')) + '</div>' +
+      '<div class="codebox">' + esc(c.code) + '</div></div>';
+    const btn = document.createElement('button');
+    btn.className = 'btn tiny';
+    btn.textContent = '复制口令';
+    btn.onclick = () => copyText(c.code, '口令已复制，去 App 里用');
+    row.appendChild(btn);
+    return row;
+  }
+
+  function openCoupons(place) {
+    const s = openSheet('今日外卖券',
+      '<p class="hint" style="margin-top:0" id="cpHint">正在取券…</p>' +
+      '<div id="cpList" class="list"></div>' +
+      '<div class="actions-2"><a class="btn tiny" href="' + couponUrl() + '" target="_blank" rel="noopener">打开完整页面</a></div>');
+    (async () => {
+      const hint = $('#cpHint', s.wrap);
+      const list = $('#cpList', s.wrap);
+      try {
+        const data = await window.COUPONS.fetchCoupons(S.couponUrl);
+        const items = window.COUPONS.pickFor(data.coupons, place || 'takeout');
+        if (!items.length) {
+          hint.textContent = '今天没解析到能用的券，点下面打开完整页面看看。';
+          return;
+        }
+        hint.textContent = '共 ' + items.length + ' 张' + (data.updatedAt ? ' · 更新于 ' + data.updatedAt : '') +
+          '。券的力度和使用规则以对应 App 内为准。';
+        items.slice(0, 20).forEach((c) => list.appendChild(couponRow(c)));
+      } catch (e) {
+        hint.textContent = (e.message || '取券失败') + '。可以直接打开完整页面看。';
+      }
+    })();
+  }
+
+  function renderCouponCard() {
+    const box = $('#couponCard');
+    if (!box) return;
+    box.innerHTML =
+      '<p class="hint" style="margin-top:0">券来自隔壁的「优惠猎手」项目（走官方和公开券接口，不爬 App、不绕风控）。抽到外卖时顺手看一眼今天有没有能用的券。</p>' +
+      '<div class="actions-2" style="margin-top:0"><button class="btn tiny primary" id="cpOpen">🎟 看今天的券</button>' +
+      '<a class="btn tiny" href="' + couponUrl() + '" target="_blank" rel="noopener">打开优惠猎手</a></div>' +
+      '<label class="field" style="margin-top:12px"><span class="fl">优惠页地址（默认就是优惠猎手，可换成你自己的部署）</span>' +
+      '<input type="text" id="cpUrl" value="' + esc(couponUrl()) + '"></label>' +
+      '<button class="btn tiny" id="cpUrlSave">保存地址</button>';
+    $('#cpOpen', box).onclick = () => openCoupons('takeout');
+    $('#cpUrlSave', box).onclick = () => {
+      S.couponUrl = $('#cpUrl', box).value.trim();
+      save(); renderCouponCard(); toast('地址已保存');
     };
   }
 
@@ -999,6 +1399,7 @@
   $('#likeBtn').onclick = () => vote('like');
   $('#dislikeBtn').onclick = () => vote('dislike');
   $('#shareBtn').onclick = shareResult;
+  $('#couponBtn').onclick = () => openCoupons('takeout');
   $('#patchBtn').onclick = () => { if (current) openEditor(current.d, !!S.custom.find((x) => x.id === current.d.id)); };
   $('#clearHistory').onclick = () => {
     if (confirm('清空全部就餐记录？自建菜单和黑名单不受影响。')) {
@@ -1026,5 +1427,8 @@
   renderFilters();
   renderMe();
   renderLog();
+  renderLoc();
+  renderLocSettings();
+  renderCouponCard();
   renderPick();
 })();

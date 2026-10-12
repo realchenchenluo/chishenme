@@ -53,6 +53,7 @@
           <button class="btn tiny" id="dislikeBtn">👎 踩雷</button>
           <button class="btn tiny" id="blockBtn">🚫 别再推</button>
           <button class="btn tiny" id="patchBtn">✏️ 改价</button>
+          <button class="btn tiny" id="couponBtn" hidden>🎟 外卖券</button>
         </div>
         <p class="hint" id="poolInfo" style="text-align:center"></p>
       </div>
@@ -66,6 +67,11 @@
         <h2>手气</h2>
         <div class="chips wrap" id="modeChips"></div>
         <p class="hint" id="modeHint">均衡模式：口碑、价格、等待时间一起算，谁也不压倒谁。</p>
+      </div>
+
+      <div class="card">
+        <h2>📍 本地化 <span class="sub" id="locSub"></span></h2>
+        <div id="locBody"></div>
       </div>
     </section>
 
@@ -92,6 +98,16 @@
 
     <!-- ================= 我的 ================= -->
     <section id="page-me" class="page" hidden>
+      <div class="card">
+        <h2>定位与本地数据 <span class="sub">决定推荐能不能贴合你那边</span></h2>
+        <div id="locSettings"></div>
+      </div>
+
+      <div class="card">
+        <h2>外卖券 <span class="sub">联合「优惠猎手」</span></h2>
+        <div id="couponCard"></div>
+      </div>
+
       <div class="card">
         <h2>我的菜单 <span class="sub" id="customCount"></span></h2>
         <p class="hint">把你学校食堂的窗口菜、常点的本地外卖加进来，抽签就完全贴合你身边的价格。数据只存在你自己的手机上。</p>
@@ -157,6 +173,8 @@
 </template>
 
 <script src="./assets/data.js"></script>
+<script src="./assets/geo.js"></script>
+<script src="./assets/coupons.js"></script>
 <script src="./assets/app.js"></script>
 </body>
 </html>
