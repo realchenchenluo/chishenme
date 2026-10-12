@@ -28,7 +28,10 @@
     const target = url || DEFAULT_URL;
     let res;
     try { res = await fetch(target, { cache: 'no-store' }); }
-    catch (e) { throw new Error('取不到优惠页（可能是网络或跨域问题）'); }
+    catch (e) {
+      throw new Error('取不到优惠页（可能是网络或跨域问题）。如果你改过地址，' +
+        '也可能是被本站 CSP 的 connect-src 白名单拦下了——见 README 的安全说明');
+    }
     if (!res.ok) throw new Error('优惠页返回 HTTP ' + res.status);
     const html = await res.text();
     return parse(html);

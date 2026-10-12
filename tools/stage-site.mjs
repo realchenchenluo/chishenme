@@ -17,7 +17,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, '_site');
 
 // 要发布的文件。packs/ 必须带上：应用运行时会 fetch ./packs/index.json
-const INCLUDE_FILES = ['index.html', 'icon.svg', 'manifest.webmanifest'];
+// _headers 是 Cloudflare Pages 的安全响应头（GitHub Pages 会忽略它，无副作用）
+const INCLUDE_FILES = ['index.html', 'icon.svg', 'manifest.webmanifest', '_headers'];
 const INCLUDE_DIRS = ['assets', 'packs'];
 
 function copyFile(src, dest) {

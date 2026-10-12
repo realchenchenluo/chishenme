@@ -54,7 +54,9 @@ jobs:
     if: needs.precheck.outputs.ready == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # 固定到 commit（而不是 @v4 标签）：万一上游标签被移动或账号被攻破，
+      # 拿不到我们的 CLOUDFLARE_API_TOKEN。升级时手动改这一行。
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
 
       # 这个站没有构建步骤，只是把要发布的文件挑出来放进 _site
       # （packs/ 必须带上：应用运行时会去读 packs/index.json）
@@ -88,7 +90,7 @@ jobs:
       # 项目不存在时建出来；已存在会报错，忽略即可
       - name: 确保 Pages 项目存在
         continue-on-error: true
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd  # v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ env.CF_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -98,7 +100,7 @@ jobs:
           command: pages project create chishenme-77 --production-branch=main
 
       - name: 推送到 Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd  # v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ env.CF_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}

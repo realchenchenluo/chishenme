@@ -256,6 +256,20 @@ tools/stage-site.mjs     生成发布产物 _site/（GitHub Pages 与 Cloudflare
 - [Valaraucoo/what-to-eat](https://github.com/Valaraucoo/what-to-eat) — 按菜系/价格/评分/配送时间过滤的点餐随机
 - [优惠猎手 / daequan](https://github.com/realchenchenluo/daequan) — 外卖券数据源，本项目的联合对象
 
+## 隐私与安全
+
+完整的说明（威胁模型、漏洞报告方式、已知边界）写在 [`SECURITY.md`](SECURITY.md)。要点：
+
+- **数据只在访客自己的浏览器里**：菜单、记录、黑名单、定位结果、高德 Key 都只写 localStorage；没有后端、没有账号、没有统计、没有 Cookie、没有第三方 JS/CDN
+- **只有三处联网，且都在用户点击后才发生**：逆地理（BigDataCloud）、高德周边（用户自己的 Key）、取券（优惠猎手页面）。坐标在上报前截断到约 100 米；用「手动选城市」则完全不发坐标
+- **别人贡献的数据当不可信输入处理**：入库时剥掉尖括号、限制长度、数字夹到合理区间，渲染时统一转义，存量 localStorage 每次启动也重新净化
+- **CSP**：`script-src 'self'`，页面没有任何内联脚本；`connect-src` 是白名单。所以即使有人往菜单包里塞脚本，既执行不起来，也没有地址能把数据发出去
+- **供应链**：前端零依赖；GitHub Actions 固定到 commit SHA，而不是可移动的 `@v3` 标签
+
+一个需要知道的副作用：`connect-src` 是白名单，**如果你把「优惠页地址」改成白名单之外的域名，浏览器会拦下这个请求**（页面会给出提示）。要接自己的券站，就得同时把域名加进 `index.html` 的 meta CSP 和 `_headers` 里。这是拿一点灵活性换「注入的脚本无处可发」。
+
+GitHub Pages 不支持自定义响应头，所以那边只有页面内的 meta CSP；Cloudflare 那边由 [`_headers`](_headers) 额外提供 `nosniff`、`no-referrer`、`X-Frame-Options` 等。
+
 ## 许可
 
 MIT

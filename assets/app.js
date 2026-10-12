@@ -85,6 +85,33 @@
       const out = Object.assign(base, o);
       out.filters = Object.assign(clone(DEFAULTS.filters), o.filters || {});
       out.diet = o.diet || {};
+      // 存量数据也过一遍净化：万一之前导入过被人改过的 JSON，这里顺手清掉
+      out.custom = (Array.isArray(o.custom) ? o.custom : []).map((c) => {
+        const s = sanitizeDish(c);
+        if (!s) return null;
+        const keep = { id: stripMarkup(c.id, 80), builtin: false };
+        if (c.pack) keep.pack = stripMarkup(c.pack, 40);
+        if (c.packName) keep.packName = stripMarkup(c.packName, 60);
+        if (c.source) keep.source = stripMarkup(c.source, 200);
+        if (c.from === 'gaode') keep.from = 'gaode';
+        return Object.assign(keep, s);
+      }).filter(Boolean);
+      out.blacklist = (Array.isArray(o.blacklist) ? o.blacklist : [])
+        .map((b) => (b && b.id ? { id: stripMarkup(b.id, 80), name: stripMarkup(b.name, 40) } : null)).filter(Boolean);
+      out.history = (Array.isArray(o.history) ? o.history : []).map((h) => (h && h.name ? {
+        id: stripMarkup(h.id, 80), name: stripMarkup(h.name, 40),
+        price: num(h.price, 0, 999, 0),
+        place: PLACES.includes(h.place) ? h.place : 'canteen',
+        meal: stripMarkup(h.meal, 12),
+        ts: num(h.ts, 0, 4102444800000, Date.now())
+      } : null)).filter(Boolean);
+      const patches = {};
+      const rawPatches = (o.patches && typeof o.patches === 'object') ? o.patches : {};
+      Object.keys(rawPatches).forEach((k) => {
+        const sp = sanitizePatch(rawPatches[k]);
+        if (sp) patches[stripMarkup(k, 80)] = sp;
+      });
+      out.patches = patches;
       return out;
     } catch (e) { return clone(DEFAULTS); }
   }
@@ -344,8 +371,8 @@
       '<span class="chip ' + (d.r >= 4.4 ? 'hot' : '') + '">' + stars + ' ' + d.r.toFixed(1) + '</span>' +
       '<span class="chip good">' + (o.place === 'takeout' ? '外卖' : '食堂') + '</span>' +
       '</div>' +
-      '<div class="tags">' + d.t.map((t) => '<span class="tag">' + t + '</span>').join('') + '</div>' +
-      (d.d ? '<p class="desc">' + d.d + '</p>' : '') +
+      '<div class="tags">' + d.t.map((t) => '<span class="tag">' + esc(t) + '</span>').join('') + '</div>' +
+      (d.d ? '<p class="desc">' + esc(d.d) + '</p>' : '') +
       '<div class="why">抽中理由：' + whyText(d, o, buildPool(false)) + '</div>' +
       (altTxt ? '<div class="alt">' + altTxt + '</div>' : '') +
       (d.source ? '<div class="alt">' + esc(d.source) + '</div>' : '') +
@@ -742,7 +769,7 @@
     wrap.style.cssText = 'position:fixed;inset:0;z-index:70;background:rgba(20,12,8,.5);display:flex;align-items:flex-end;justify-content:center;padding:0';
     wrap.innerHTML =
       '<div style="background:var(--card);width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom));border:1px solid var(--line)">' +
-      '<h2 style="margin:0 0 12px;font-size:16px">' + (dish ? '编辑「' + d.n + '」' : '添加一个身边的菜') + '</h2>' +
+      '<h2 style="margin:0 0 12px;font-size:16px">' + (dish ? '编辑「' + esc(d.n) + '」' : '添加一个身边的菜') + '</h2>' +
       '<label class="field"><span class="fl">菜名</span><input type="text" id="e_n" value="' + esc(d.n) + '" ' + (isCustom || !dish ? '' : 'disabled') + ' placeholder="例：三楼红烧肉、楼下沙县拌面"></label>' +
       '<label class="field"><span class="fl">在哪儿能吃到</span><select id="e_p" ' + (isCustom || !dish ? '' : 'disabled') + '>' +
       '<option value="canteen"' + (d.p === 'canteen' ? ' selected' : '') + '>食堂 / 校内</option>' +
@@ -808,14 +835,17 @@
         if (tw[0] > tw[1]) tw = [tw[1], tw[0]];
         vals.tp = tp; vals.tw = tw;
       }
+      // 用户填的也要净化：长度、数值范围、去掉尖括号
+      const clean = sanitizeDish(vals);
+      if (!clean) { toast('菜名不能为空'); return; }
 
       if (dish && !isCustom) {
-        S.patches[dish.id] = Object.assign({}, S.patches[dish.id], vals);
-        delete S.patches[dish.id].n; delete S.patches[dish.id].p;
+        const patch = sanitizePatch(clean);
+        if (patch) S.patches[dish.id] = Object.assign({}, S.patches[dish.id], patch);
       } else {
         const target = dish && isCustom ? S.custom.find((x) => x.id === dish.id) : null;
-        if (target) Object.assign(target, vals);
-        else S.custom.push(Object.assign({ id: 'c:' + name + ':' + Date.now(), builtin: false }, vals));
+        if (target) Object.assign(target, clean);
+        else S.custom.push(Object.assign({ id: 'c:' + clean.n + ':' + Date.now(), builtin: false }, clean));
       }
       save(); close(); renderMe(); renderPick();
       toast('已保存，抽签会用你的新数据');
@@ -824,6 +854,69 @@
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  /* ================= 输入净化 =================
+   * 这个项目允许别人贡献数据（校园菜单包、导入的 JSON、同学分享的菜单），
+   * 所以凡是外来的文本都当不可信输入处理，双保险：
+   *   1) 渲染时统一 esc()，不让它有机会变成标签或属性
+   *   2) 入库时统一 sanitizeDish()，剥掉尖括号、限制长度、把数字夹到合理区间
+   * 即使某个渲染点将来漏了转义，数据本身也已经不含可执行标记。
+   * 页面另有 CSP（见 index.html 的 meta 与根目录 _headers），是第三层兜底。
+   */
+  function stripMarkup(s, max) {
+    return String(s == null ? '' : s)
+      .replace(/[<>]/g, '')                      // 尖括号一律去掉，杜绝标签注入
+      .replace(/[\u0000-\u001F\u007F]/g, '')     // 控制字符
+      .trim()
+      .slice(0, max);
+  }
+  function num(v, lo, hi, dflt) {
+    const n = typeof v === 'number' ? v : parseFloat(v);
+    if (!isFinite(n)) return dflt;
+    return clamp(n, lo, hi);
+  }
+  function numPair(v, lo, hi, dflt) {
+    const a = Array.isArray(v) ? v : [];
+    let x = num(a[0], lo, hi, dflt[0]);
+    let y = num(a[1], lo, hi, dflt[1]);
+    if (x > y) { const t = x; x = y; y = t; }
+    return [Math.round(x * 10) / 10, Math.round(y * 10) / 10];
+  }
+  const PLACES = ['canteen', 'takeout', 'both'];
+
+  // 返回规范化后的菜品；菜名空则返回 null（调用方跳过这条）
+  function sanitizeDish(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const n = stripMarkup(raw.n, 40);
+    if (!n) return null;
+    const out = {
+      n: n,
+      p: PLACES.includes(raw.p) ? raw.p : 'canteen',
+      price: numPair(raw.price, 0, 999, [12, 18]),
+      wait: numPair(raw.wait, 0, 600, [5, 15]),
+      r: Math.round(num(raw.r, 3, 5, 4.0) * 10) / 10,
+      t: (Array.isArray(raw.t) ? raw.t : []).map((x) => stripMarkup(x, 12)).filter(Boolean).slice(0, 8),
+      d: stripMarkup(raw.d, 160)
+    };
+    if (!out.t.length) out.t = ['套餐'];
+    if (raw.tp) out.tp = numPair(raw.tp, 0, 999, out.price);
+    if (raw.tw) out.tw = numPair(raw.tw, 0, 600, [30, 45]);
+    return out;
+  }
+
+  // 修正值（patches）也只允许这几个字段，避免有人在里面塞别的键
+  function sanitizePatch(v) {
+    if (!v || typeof v !== 'object') return null;
+    const out = {};
+    if (v.price) out.price = numPair(v.price, 0, 999, [0, 0]);
+    if (v.wait) out.wait = numPair(v.wait, 0, 600, [0, 0]);
+    if (v.tp) out.tp = numPair(v.tp, 0, 999, [0, 0]);
+    if (v.tw) out.tw = numPair(v.tw, 0, 600, [0, 0]);
+    if (v.r !== undefined) out.r = Math.round(num(v.r, 3, 5, 4.2) * 10) / 10;
+    if (v.t) out.t = (Array.isArray(v.t) ? v.t : []).map((x) => stripMarkup(x, 12)).filter(Boolean).slice(0, 8);
+    if (v.d !== undefined) out.d = stripMarkup(v.d, 160);
+    return Object.keys(out).length ? out : null;
   }
 
   function openBulk() {
@@ -848,8 +941,10 @@
       lines.forEach((line) => {
         const parsed = parseLine(line);
         if (!parsed) return;
-        const exist = S.custom.find((x) => x.n === parsed.n);
-        const dish = Object.assign({ id: 'c:' + parsed.n, builtin: false, p: p, wait: [8, 15], tp: [16, 24], tw: [30, 45], d: '' }, parsed);
+        const s = sanitizeDish(Object.assign({ p: p, wait: [8, 15], tp: [16, 24], tw: [30, 45], d: '' }, parsed));
+        if (!s) return;
+        const exist = S.custom.find((x) => x.n === s.n);
+        const dish = Object.assign({ id: 'c:' + s.n, builtin: false }, s);
         if (exist) Object.assign(exist, dish); else S.custom.push(dish);
         added++;
       });
@@ -939,16 +1034,33 @@
         const o = JSON.parse($('#i_txt', wrap).value);
         let n = 0;
         (o.custom || []).forEach((c) => {
-          if (!c || !c.n) return;
-          if (!c.id) c.id = 'c:' + c.n;
-          c.builtin = false;
-          const exist = S.custom.find((x) => x.id === c.id || x.n === c.n);
-          if (exist) Object.assign(exist, c); else S.custom.push(c);
+          const s = sanitizeDish(c);
+          if (!s) return;
+          const id = stripMarkup(c.id, 80) || 'c:' + s.n;
+          const exist = S.custom.find((x) => x.id === id || x.n === s.n);
+          const dish = Object.assign({ id: id, builtin: false }, s);
+          if (exist) Object.assign(exist, dish); else S.custom.push(dish);
           n++;
         });
-        Object.assign(S.patches, o.patches || {});
-        (o.blacklist || []).forEach((b) => { if (!S.blacklist.some((x) => x.id === b.id)) S.blacklist.push(b); });
-        if (o.diet) Object.assign(S.diet, o.diet);
+        // 修正值只接受白名单字段，避免有人在 JSON 里塞别的键
+        const inPatches = (o.patches && typeof o.patches === 'object') ? o.patches : {};
+        Object.keys(inPatches).forEach((k) => {
+          const sp = sanitizePatch(inPatches[k]);
+          if (sp) S.patches[stripMarkup(k, 80)] = Object.assign({}, S.patches[stripMarkup(k, 80)], sp);
+        });
+        (o.blacklist || []).forEach((b) => {
+          if (!b || !b.id) return;
+          const item = { id: stripMarkup(b.id, 80), name: stripMarkup(b.name, 40) };
+          if (!S.blacklist.some((x) => x.id === item.id)) S.blacklist.push(item);
+        });
+        // 忌口只接受已知标签，值强制成布尔
+        if (o.diet && typeof o.diet === 'object') {
+          const known = new Set(DIETS.map((d) => d[0]));
+          Object.keys(o.diet).forEach((k) => {
+            const tag = stripMarkup(k, 12);
+            if (known.has(tag)) S.diet[tag] = !!o.diet[k];
+          });
+        }
         save(); close(); renderMe(); renderFilters(); renderPick();
         toast('导入完成，共 ' + n + ' 个菜品');
       } catch (e) { toast('JSON 解析失败，检查一下内容'); }
@@ -1053,7 +1165,7 @@
   function openAmapHelp() {
     openSheet('免费申请一个高德 Key',
       '<ol style="padding-left:18px;margin:0;font-size:13.5px;line-height:2">' +
-      '<li>打开 <a href="https://console.amap.com/dev/key/app" target="_blank" rel="noopener">高德开放平台控制台</a>，手机号注册并完成实名认证（个人开发者免费）。</li>' +
+      '<li>打开 <a href="https://console.amap.com/dev/key/app" target="_blank" rel="noopener noreferrer">高德开放平台控制台</a>，手机号注册并完成实名认证（个人开发者免费）。</li>' +
       '<li>「应用管理 → 我的应用 → 创建新应用」，名字随便填。</li>' +
       '<li>点「添加 Key」，<b>服务平台必须选「Web服务」</b>。选成「Web端(JS API)」会报 USERKEY_PLAT_NOMATCH。</li>' +
       '<li>把生成的 Key 复制回来，粘到「定位与本地数据」里保存即可。</li>' +
@@ -1094,7 +1206,7 @@
     }
 
     let results = [];
-    openSheet('周边吃的 · ' + (S.loc && S.loc.city ? S.loc.city : '当前位置'),
+    openSheet('周边吃的 · ' + (S.loc && S.loc.city ? esc(S.loc.city) : '当前位置'),
       '<p class="hint" style="margin-top:0">以「' + esc(anchor.src) + '」为圆心，半径 ' + radiusLabel() + '，按直线距离排序。' +
       (anchor.exact ? '' : '<b>这不是你的实时位置</b>，搜出来的店可能离你较远；想让结果更准就先去定位。') +
       '评分和人均是高德地图的数据，<b>不是美团/大众点评的</b>，导入后可以自己改。</p>' +
@@ -1174,7 +1286,7 @@
     } else {
       box.innerHTML =
         '<div class="item" style="border:0;padding:0 0 8px"><div class="grow">' +
-        '<div class="name">' + locLabel() + '</div>' +
+        '<div class="name">' + esc(locLabel()) + '</div>' +
         '<div class="sub2">' + esc([L.province, L.source ? '来自' + L.source : '', L.acc ? '精度约 ' + L.acc + ' 米' : ''].filter(Boolean).join(' · ')) + '</div>' +
         '</div></div>' +
         (f ? '<p class="hint" style="margin:0 0 8px">外卖价 ×' + f.price + '、配送时长 ×' + f.wait +
@@ -1196,7 +1308,7 @@
     const key = (S.amapKey || '').trim();
     box.innerHTML =
       '<div class="item" style="border:0;padding:0 0 8px"><div class="grow">' +
-      '<div class="name">' + locLabel() + '</div>' +
+      '<div class="name">' + esc(locLabel()) + '</div>' +
       '<div class="sub2">' + (L && L.addr ? esc(L.addr)
         : (L && L.lat ? '坐标 ' + L.lat + ', ' + L.lon + '（截断到约 100 米精度）' : '定位只用来判断城市，坐标不上传任何服务器——这个网站没有服务器')) + '</div>' +
       '</div></div>' +
@@ -1261,9 +1373,16 @@
     if (nb2) nb2.onclick = () => openNearby();
   }
 
+  // 只放行 http(s) 的链接：防止有人在可配置地址里塞 javascript: 之类
+  function safeUrl(u, dflt) {
+    const s = stripMarkup(u, 300);
+    return /^https?:\/\//i.test(s) ? s : (dflt || '');
+  }
+
   /* ================= 外卖券（联合优惠猎手）================= */
   function couponUrl() {
-    return (S.couponUrl || '').trim() || (window.COUPONS ? COUPONS.DEFAULT_URL : '');
+    const fallback = window.COUPONS ? COUPONS.DEFAULT_URL : '';
+    return safeUrl((S.couponUrl || '').trim(), fallback) || fallback;
   }
 
   function couponRow(c) {
@@ -1285,12 +1404,12 @@
     const s = openSheet('今日外卖券',
       '<p class="hint" style="margin-top:0" id="cpHint">正在取券…</p>' +
       '<div id="cpList" class="list"></div>' +
-      '<div class="actions-2"><a class="btn tiny" href="' + couponUrl() + '" target="_blank" rel="noopener">打开完整页面</a></div>');
+      '<div class="actions-2"><a class="btn tiny" href="' + esc(couponUrl()) + '" target="_blank" rel="noopener noreferrer">打开完整页面</a></div>');
     (async () => {
       const hint = $('#cpHint', s.wrap);
       const list = $('#cpList', s.wrap);
       try {
-        const data = await window.COUPONS.fetchCoupons(S.couponUrl);
+        const data = await window.COUPONS.fetchCoupons(couponUrl());
         const items = window.COUPONS.pickFor(data.coupons, place || 'takeout');
         if (!items.length) {
           hint.textContent = '今天没解析到能用的券，点下面打开完整页面看看。';
@@ -1311,7 +1430,7 @@
     box.innerHTML =
       '<p class="hint" style="margin-top:0">券来自隔壁的「优惠猎手」项目（走官方和公开券接口，不爬 App、不绕风控）。抽到外卖时顺手看一眼今天有没有能用的券。</p>' +
       '<div class="actions-2" style="margin-top:0"><button class="btn tiny primary" id="cpOpen">看今天的券</button>' +
-      '<a class="btn tiny" href="' + couponUrl() + '" target="_blank" rel="noopener">打开优惠猎手</a></div>' +
+      '<a class="btn tiny" href="' + esc(couponUrl()) + '" target="_blank" rel="noopener noreferrer">打开优惠猎手</a></div>' +
       '<label class="field" style="margin-top:12px"><span class="fl">优惠页地址（默认就是优惠猎手，可换成你自己的部署）</span>' +
       '<input type="text" id="cpUrl" value="' + esc(couponUrl()) + '"></label>' +
       '<button class="btn tiny" id="cpUrlSave">保存地址</button>';
@@ -1339,30 +1458,29 @@
   }
 
   async function importPack(pack) {
-    const res = await fetch(pack.file, { cache: 'no-store' });
+    // 只允许取本站 packs/ 下的包文件：万一 index.json 被人改成指向外部地址，
+    // 那个地址就能看到每位访客的 IP，也能塞任意数据进来，这里直接拦掉
+    const file = String(pack.file || '');
+    if (!/^\.?\/?packs\/[\w.\-]+\.json$/i.test(file)) {
+      throw new Error('包地址不合法（只允许本站 packs/ 下的 json）');
+    }
+    const res = await fetch(file, { cache: 'no-store' });
     if (!res.ok) throw new Error('下载菜单包失败（HTTP ' + res.status + '）');
     const data = await res.json();
     const list = data.dishes || [];
     let added = 0, updated = 0;
     list.forEach((d) => {
-      if (!d || !d.n) return;
-      const dish = {
+      const s = sanitizeDish(Object.assign({ p: pack.place || 'canteen' }, d));
+      if (!s) return;
+      const packId = stripMarkup(pack.id, 40);
+      const dish = Object.assign({}, s, {
         // 用包内稳定编号做 id：同一道菜在不同窗口各有一份时不会被合并
-        id: 'k:' + pack.id + ':' + (d.k !== undefined && d.k !== null ? d.k : d.n),
+        id: 'k:' + packId + ':' + stripMarkup(String(d.k !== undefined && d.k !== null ? d.k : d.n), 40),
         builtin: false,
-        pack: pack.id,
-        packName: pack.name,
-        source: pack.attribution || '',
-        n: d.n,
-        p: d.p || pack.place || 'canteen',
-        price: d.price || [12, 18],
-        wait: d.wait || [5, 15],
-        r: typeof d.r === 'number' ? d.r : 4.0,
-        t: (d.t && d.t.length) ? d.t : ['套餐'],
-        d: d.d || ''
-      };
-      if (d.tp) dish.tp = d.tp;
-      if (d.tw) dish.tw = d.tw;
+        pack: packId,
+        packName: stripMarkup(pack.name, 60),
+        source: stripMarkup(pack.attribution || '', 200)
+      });
       const exist = S.custom.find((x) => x.id === dish.id);
       if (exist) { Object.assign(exist, dish); updated++; } else { S.custom.push(dish); added++; }
     });
@@ -1374,7 +1492,7 @@
     const s = openSheet('校园菜单包',
       '<p class="hint" style="margin-top:0">别人整理好的学校菜单，导入后抽签用的就是你身边的真实菜价。这里的包都经过授权核对，来源和许可写在每一项下面。</p>' +
       '<div id="pkList" class="list"></div>' +
-      '<div class="actions-2"><a class="btn tiny" href="https://github.com/realchenchenluo/chishenme/tree/main/packs" target="_blank" rel="noopener">在 GitHub 上看全部</a>' +
+      '<div class="actions-2"><a class="btn tiny" href="https://github.com/realchenchenluo/chishenme/tree/main/packs" target="_blank" rel="noopener noreferrer">在 GitHub 上看全部</a>' +
       '<button class="btn tiny" id="pkHow">怎么贡献我学校的</button></div>');
     const listBox = $('#pkList', s.wrap);
     $('#pkHow', s.wrap).onclick = () => { s.close(); openPackGuide(); };
@@ -1400,7 +1518,7 @@
             (p.note ? '<p class="hint" style="margin:6px 0 0">' + esc(p.note) + '</p>' : '') +
             (done ? '<p class="hint" style="margin:6px 0 0">已导入 ' + done + ' 道</p>' : '') +
             '<div class="actions-2" style="margin-top:8px"><button class="btn tiny primary" data-import>导入</button>' +
-            (p.sourceUrl ? '<a class="btn tiny" href="' + esc(p.sourceUrl) + '" target="_blank" rel="noopener">看原始数据</a>' : '') +
+            (p.sourceUrl ? '<a class="btn tiny" href="' + esc(safeUrl(p.sourceUrl)) + '" target="_blank" rel="noopener noreferrer">看原始数据</a>' : '') +
             '</div>';
           row.querySelector('[data-import]').onclick = async (ev) => {
             const btn = ev.target;
@@ -1431,12 +1549,12 @@
       '<p class="hint" style="margin-top:0">你把自己学校食堂的菜录一遍，全校同学都能直接用。流程不复杂：</p>' +
       '<ol style="padding-left:18px;margin:0;font-size:13.5px;line-height:1.9">' +
       '<li>先点下面的「导出我的菜单」，拿到 JSON 文件（里面就是你添加的菜）。</li>' +
-      '<li>在 GitHub 上给 <a href="https://github.com/realchenchenluo/chishenme" target="_blank" rel="noopener">chishenme</a> 开一个 issue，把 JSON 贴上去；或者直接提 PR，把文件放进 <code>packs/</code> 并更新 <code>packs/index.json</code>。</li>' +
+      '<li>在 GitHub 上给 <a href="https://github.com/realchenchenluo/chishenme" target="_blank" rel="noopener noreferrer">chishenme</a> 开一个 issue，把 JSON 贴上去；或者直接提 PR，把文件放进 <code>packs/</code> 并更新 <code>packs/index.json</code>。</li>' +
       '<li>我们核对来源和许可后收录，所有人就能在「校园菜单包」里搜到你学校。</li>' +
       '</ol>' +
       '<p class="hint"><b>一条硬规矩</b>：只提交你有权共享的数据。自己一道道敲的没问题；从网上搬的必须有明确许可（CC BY、MIT 等），并且要写清署名。没有 License 的仓库数据不要搬，也不要从美团/大众点评/小红书抄评价原文。</p>' +
       '<div class="actions-2"><button class="btn tiny primary" id="pkExport">导出我的菜单</button>' +
-      '<a class="btn tiny" href="https://github.com/realchenchenluo/chishenme/blob/main/packs/README.md" target="_blank" rel="noopener">看格式说明</a></div>',
+      '<a class="btn tiny" href="https://github.com/realchenchenluo/chishenme/blob/main/packs/README.md" target="_blank" rel="noopener noreferrer">看格式说明</a></div>',
       (wrap, close) => {
         $('#pkExport', wrap).onclick = () => {
           const payload = { v: 1, kind: 'pack', at: new Date().toISOString(), dishes: S.custom };

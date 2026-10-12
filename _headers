@@ -1,0 +1,19 @@
+# Cloudflare Pages 会读取这个文件并给对应路径加上这些响应头。
+# GitHub Pages 不支持自定义响应头，所以那边只有 index.html 里的 meta CSP 兜底。
+# 改这里之后要重新部署才生效（推送 main 即可）。
+
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://restapi.amap.com https://api.bigdatacloud.net https://realchenchenluo.github.io; manifest-src 'self'; base-uri 'self'; form-action 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: geolocation=(self), camera=(), microphone=(), payment=(), usb=(), interest-cohort=()
+  X-Frame-Options: DENY
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
+
+# 静态资源可以缓存久一点；入口文件不缓存，避免发新版后拿到旧的 HTML
+/assets/*
+  Cache-Control: public, max-age=86400
+
+/packs/*
+  Cache-Control: public, max-age=3600

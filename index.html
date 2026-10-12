@@ -6,6 +6,14 @@
 <meta name="theme-color" content="#ff4d2d" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#14100e" media="(prefers-color-scheme: dark)">
 <meta name="description" content="大学生午饭晚饭决策器：定位识别你所在城市，按价格、排队/配送时间和好吃度加权随机选菜；食堂和外卖都能抽，可搜周边真实餐厅，还能顺手领外卖券。">
+<!--
+  安全策略（CSP）：脚本只允许从本站加载。
+  这样即使有人通过「菜单包 / 导入的 JSON / 第三方接口」塞进带脚本的文本，
+  浏览器也不会执行它。本站没有任何内联脚本，所以不需要放宽 script-src。
+  connect-src 是白名单：只有这几个接口能收到请求（自己的包、高德、逆地理、券站）。
+  Cloudflare 那边还有一份带安全响应头的 _headers（GitHub Pages 不支持自定义头）。
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://restapi.amap.com https://api.bigdatacloud.net https://realchenchenluo.github.io; manifest-src 'self'; base-uri 'self'; form-action 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="今天吃什么">
 <title>今天吃什么 · 大学生版</title>
@@ -156,6 +164,18 @@
           <p>抽签算法：先按条件硬筛，再按 <code>口碑 × 价格 × 等待时间 × 新鲜度</code> 加权随机。最近吃过的会明显降权，标记「别再推」的永远不会再出现。</p>
           <p>所有数据都保存在浏览器本地（localStorage），不上传任何服务器。换手机请先「导出备份」。</p>
           <p>参考了 GitHub 上同类项目的做法：加权抽签、重复抑制、黑名单、按预算筛选。校园菜单包的数据来源与许可写在每个包的说明里。</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>安全与隐私</h2>
+        <div class="about">
+          <p><b>你的数据只在这台设备上。</b>菜单、就餐记录、黑名单、定位结果、你自己填的高德 Key，全都只写进浏览器的 localStorage。这个站没有后端、没有账号、没有统计、没有 Cookie，也没有任何第三方脚本或 CDN。</p>
+          <p><b>只有三个地方会联网，而且都在你点击之后才发生：</b>定位时把坐标发给逆地理服务认城市、搜周边时发给高德（用你自己的 Key）、看券时抓取券站页面。不点就一个请求都不发。不想让坐标离开设备，就用「手动选城市」——这条路完全不联网。</p>
+          <p><b>坐标在上报前就会截断</b>到小数点后三位（约 100 米精度）；导出备份里不含坐标，只带城市名。</p>
+          <p><b>别人贡献的菜单包会被清洗。</b>菜名、标签、点评这些外来文本在入库时去掉了尖括号并限制长度，显示时统一转义，页面还有 CSP 策略（脚本只允许从本站加载）。所以就算有人往菜单包里塞脚本，也执行不起来、也没有地址能往外发数据。</p>
+          <p><b>认准官方地址</b>：本页所在地址，或仓库 README 里写的那个。仿冒的副本能读走你填在里面的高德 Key。</p>
+          <p>更完整的说明（威胁模型、漏洞报告方式、已知边界）见仓库的 <code>SECURITY.md</code>。</p>
         </div>
       </div>
     </section>
