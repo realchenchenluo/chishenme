@@ -6,7 +6,9 @@ name: 部署到 Cloudflare Pages
 # 你只需要在仓库里配一个密钥：CLOUDFLARE_API_TOKEN
 #   Account ID 由工作流自己从 token 读出来；Pages 项目不存在时也会自己建。
 #   万一 token 没有账号读取权限，再补一个 CLOUDFLARE_ACCOUNT_ID 密钥即可。
-# 换链接名字：改下面两处 chishenme（project create 和 pages deploy 各一处）。
+# 换链接名字：改下面两处项目名（project create 和 pages deploy 各一处）。
+#   注意 Cloudflare 的 <项目名>.pages.dev 是全局唯一的：如果被别的账号占了，
+#   它会自动加随机后缀（chishenme 就被占过 → 当时拿到了 chishenme-91e）。
 
 on:
   push:
@@ -90,12 +92,12 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ env.CF_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages project create chishenme --production-branch=main
+          command: pages project create chishenme-77 --production-branch=main
 
       - name: 推送到 Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ env.CF_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # 项目名决定链接：chishenme → https://chishenme.pages.dev
-          command: pages deploy _site --project-name=chishenme
+          # 项目名决定链接：chishenme-77 → https://chishenme-77.pages.dev
+          command: pages deploy _site --project-name=chishenme-77

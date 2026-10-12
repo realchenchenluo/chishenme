@@ -4,7 +4,8 @@
 
 它不是一个纯随机转盘。抽签会同时考虑**价格、排队/配送时间、好吃度**，并且**记得你最近吃过什么**，避免昨天刚吃过今天又抽到。
 
-- 在线地址：https://realchenchenluo.github.io/chishenme/
+- 在线地址（GitHub Pages）：https://realchenchenluo.github.io/chishenme/
+- 在线地址（Cloudflare Pages）：https://chishenme-77.pages.dev/
 - 纯前端静态页面，无后端、无账号、无埋点，数据只存在你自己手机的浏览器里
 - 手机端优先设计，可以「添加到主屏幕」当 App 用
 
@@ -188,7 +189,7 @@ npx serve .
 
 | | GitHub Pages（现在用的） | Cloudflare Pages |
 | --- | --- | --- |
-| 链接名字 | `realchenchenluo.github.io/chishenme/`（带用户名） | `chishenme.pages.dev`（干净、短） |
+| 链接名字 | `realchenchenluo.github.io/chishenme/`（带用户名） | `chishenme-77.pages.dev`（短、不带用户名） |
 | 国内无代理能不能开 | 时好时坏 | **大概率更差**：`*.pages.dev` 据多方反馈被 DNS 污染 + SNI 阻断 |
 | 免费、静态托管 | 是 | 是 |
 
@@ -202,14 +203,14 @@ npx serve .
    - 也可以直接用 **Edit Cloudflare Workers** 模板，它一并含了 Pages 权限
    - **token 值只在创建那一刻显示一次**，记得当场复制；错过了就点那一行的 ⋯ → Roll 重新生成（旧值立即失效）
 2. 到本仓库 **Settings → Secrets and variables → Actions** 加一个 secret：`CLOUDFLARE_API_TOKEN`，值就粘贴上面那个 token
-3. 完成。推送到 `main` 就会自动同步；Pages 项目不存在时工作流会自己建（`pages project create`），链接随即变成 `https://chishenme.pages.dev`
+3. 完成。推送到 `main` 就会自动同步；Pages 项目不存在时工作流会自己建（`pages project create`），线上地址是 `https://chishenme-77.pages.dev`
    - 如果 token 没给「Account Settings: Read」权限，工作流读不到账号，这时再补一个 `CLOUDFLARE_ACCOUNT_ID` 密钥即可（值在 Cloudflare 的 **Workers & Pages** 概览页右侧）
 
 **没配密钥时工作流会整体跳过，不会报错、不会留红叉**——但注意跳过的 job 在 GitHub 上仍显示 success，想看看到底跑没跑，要进日志找那行「未配置」。
 
 发布的产物由 `tools/stage-site.mjs` 生成 `_site/`（这个站没有构建步骤，所谓「构建」就是挑文件），GitHub Pages 和 Cloudflare 用的是同一份。
 
-**想换链接名字**：Cloudflare 上把 Pages 项目改名，再把 `.github/workflows/deploy-cloudflare.yml` 里两处 `chishenme`（`project create` 和 `pages deploy`）改成同一个名字，链接就是 `https://<新名字>.pages.dev`。
+**想换链接名字**：`<项目名>.pages.dev` 是**全局唯一**的，被别的账号占了 Cloudflare 就会自动加随机后缀（这个项目最早叫 `chishenme`，就被占了，拿到了 `chishenme-91e`；后来换成 `chishenme-77` 才拿到干净地址）。所以要改名字就：把 `.github/workflows/deploy-cloudflare.yml` 里两处项目名改成同一个没被占用的名字，重新跑一次工作流，日志里会打印实际拿到的域名。想彻底自己说了算，就绑自有域名。
 
 ## 目录结构
 
