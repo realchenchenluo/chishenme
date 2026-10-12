@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ff4d2d" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14100e" media="(prefers-color-scheme: dark)">
+<meta name="description" content="大学生午饭晚饭决策器：结合价格、配送/排队时间和好吃度随机选菜，食堂和外卖都能抽，支持自建菜单。">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="今天吃什么">
+<title>今天吃什么 · 大学生版</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icon.svg">
+<link rel="stylesheet" href="./assets/style.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">🍚</div>
+      <div>
+        <h1>今天吃什么</h1>
+        <p class="greet" id="greet">正在读取时间…</p>
+      </div>
+    </div>
+    <button class="icon-btn" id="themeBtn" title="切换深色/浅色" aria-label="切换深色模式">🌗</button>
+  </header>
+
+  <main>
+    <!-- ================= 抽一顿 ================= -->
+    <section id="page-pick" class="page">
+      <div class="card slotcard">
+        <div class="segbar" id="mealseg" role="tablist" aria-label="选择餐段"></div>
+
+        <div class="slot" id="slot" aria-live="polite">
+          <div class="slot-idle" id="slotIdle">别纠结了，抽一个</div>
+          <div class="slot-hint" id="slotHint">先看看下面的条件，再点按钮</div>
+        </div>
+
+        <div id="result" hidden></div>
+
+        <button class="btn primary wide big" id="rollBtn">🎲 抽一下</button>
+
+        <div class="actions" id="resultActions" hidden>
+          <button class="btn" id="againBtn">🔄 换一个</button>
+          <button class="btn primary" id="acceptBtn">✅ 就吃这个</button>
+        </div>
+        <div class="actions-2 many" id="resultActions2" hidden>
+          <button class="btn tiny" id="shareBtn">📋 发给同学</button>
+          <button class="btn tiny" id="likeBtn">👍 好吃</button>
+          <button class="btn tiny" id="dislikeBtn">👎 踩雷</button>
+          <button class="btn tiny" id="blockBtn">🚫 别再推</button>
+          <button class="btn tiny" id="patchBtn">✏️ 改价</button>
+        </div>
+        <p class="hint" id="poolInfo" style="text-align:center"></p>
+      </div>
+
+      <div class="card">
+        <h2>抽签条件 <span class="sub" id="filterSummary"></span></h2>
+        <div id="filters"></div>
+      </div>
+
+      <div class="card">
+        <h2>手气</h2>
+        <div class="chips wrap" id="modeChips"></div>
+        <p class="hint" id="modeHint">均衡模式：口碑、价格、等待时间一起算，谁也不压倒谁。</p>
+      </div>
+    </section>
+
+    <!-- ================= 记录 ================= -->
+    <section id="page-log" class="page" hidden>
+      <div class="card">
+        <h2>最近吃得怎么样</h2>
+        <div class="stats" id="stats"></div>
+        <div class="bar" id="bar"><div class="a" style="width:50%"></div><div class="b" style="width:50%"></div></div>
+        <p class="hint" id="barLegend"></p>
+      </div>
+      <div class="card">
+        <h2>今天吃了啥</h2>
+        <div class="list" id="todayList"></div>
+      </div>
+      <div class="card">
+        <h2>全部记录 <span class="sub" id="historyCount"></span></h2>
+        <div class="list" id="historyList"></div>
+        <div class="actions-2" style="margin-top:12px">
+          <button class="btn tiny danger" id="clearHistory">清空记录</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 我的 ================= -->
+    <section id="page-me" class="page" hidden>
+      <div class="card">
+        <h2>我的菜单 <span class="sub" id="customCount"></span></h2>
+        <p class="hint">把你学校食堂的窗口菜、常点的本地外卖加进来，抽签就完全贴合你身边的价格。数据只存在你自己的手机上。</p>
+        <div class="list" id="customList" style="margin-top:10px"></div>
+        <div class="actions-2" style="margin-top:12px">
+          <button class="btn tiny" id="addBtn">＋ 添加一个</button>
+          <button class="btn tiny" id="bulkBtn">📋 批量粘贴</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>忌口 <span class="sub">抽签时自动避开</span></h2>
+        <div id="dietChips" class="chips wrap"></div>
+      </div>
+
+      <div class="card">
+        <h2>不再推荐 <span class="sub" id="blockCount"></span></h2>
+        <div class="list" id="blockList"></div>
+      </div>
+
+      <div class="card">
+        <h2>数据</h2>
+        <div class="actions-2">
+          <button class="btn tiny" id="exportBtn">⬇️ 导出备份</button>
+          <button class="btn tiny" id="importBtn">⬆️ 导入/粘贴导入</button>
+          <button class="btn tiny" id="copyMenuBtn">🔗 复制我的菜单</button>
+        </div>
+        <p class="hint">导出的 JSON 包含你的自建菜品、改过的价格、黑名单和偏好，可以发给同学直接用。</p>
+      </div>
+
+      <div class="card">
+        <h2>说明</h2>
+        <div class="about">
+          <p>内置菜品的价格、等待时间都是<b>全国高校的参考值</b>，各地差异很大，请以你学校食堂和外卖 App 的实际标价为准。看到不对的，点结果卡上的「✏️ 改价」，改完只影响你自己的手机。</p>
+          <p>「好吃度」是综合口碑的参考分，不是官方评分；你可以用 👍👎 调教它，抽签概率会跟着变。</p>
+          <p>抽签算法：先按条件硬筛，再按 <code>口碑 × 价格 × 等待时间 × 新鲜度</code> 加权随机。最近吃过的会明显降权，标记「别再推」的永远不会再出现。</p>
+          <p>所有数据都保存在浏览器本地（localStorage），不上传任何服务器。换手机请先「导出备份」。</p>
+          <p>参考了 GitHub 上同类项目的做法：加权抽签、重复抑制、黑名单、按重计价的场景化筛选。</p>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<nav class="tabbar" role="tablist">
+  <button class="on" data-tab="pick" role="tab" aria-selected="true"><span class="ico">🎲</span>抽一顿</button>
+  <button data-tab="log" role="tab" aria-selected="false"><span class="ico">📖</span>记录</button>
+  <button data-tab="me" role="tab" aria-selected="false"><span class="ico">🙋</span>我的</button>
+</nav>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<!-- 列表模板 -->
+<template id="tpl-item">
+  <div class="item">
+    <div class="grow">
+      <div class="name"></div>
+      <div class="sub2"></div>
+    </div>
+    <div class="right"></div>
+  </div>
+</template>
+
+<script src="./assets/data.js"></script>
+<script src="./assets/app.js"></script>
+</body>
+</html>

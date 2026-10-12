@@ -1,0 +1,20 @@
+{
+  "name": "今天吃什么 · 大学生版",
+  "short_name": "今天吃什么",
+  "description": "大学生午饭晚饭决策器：结合价格、等待/配送时间和好吃度随机选菜，食堂和外卖都能抽。",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fdf6ef",
+  "theme_color": "#ff4d2d",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
