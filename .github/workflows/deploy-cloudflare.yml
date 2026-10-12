@@ -92,6 +92,9 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ env.CF_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # 必须锁版本：runner 上预装的 wrangler 3.90 会报
+          # "Failed to publish your Function. Unknown internal error"
+          wranglerVersion: '4.149.0'
           command: pages project create chishenme-77 --production-branch=main
 
       - name: 推送到 Cloudflare Pages
@@ -99,5 +102,6 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ env.CF_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.149.0'
           # 项目名决定链接：chishenme-77 → https://chishenme-77.pages.dev
           command: pages deploy _site --project-name=chishenme-77
