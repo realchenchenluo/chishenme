@@ -68,7 +68,8 @@
     amapKey: '',     // 你自己的高德「Web服务」Key，只存本机
     radius: 2000,    // 周边搜索半径（米）
     cityAdjust: true,// 按城市等级微调外卖价与配送时长（估算值，可关）
-    couponUrl: ''    // 优惠猎手页面地址，留空用默认
+    couponUrl: '',   // 优惠猎手页面地址，留空用默认
+    schoolLoaded: '' // 已自动载入过哪个本校菜单包（避免每次打开都重复导入）
   };
 
   let S = load();
@@ -94,6 +95,7 @@
         if (c.packName) keep.packName = stripMarkup(c.packName, 60);
         if (c.source) keep.source = stripMarkup(c.source, 200);
         if (c.from === 'gaode') keep.from = 'gaode';
+        if (c.school) keep.school = true;   // 本校菜单标记要留着，结果卡靠它打标签
         return Object.assign(keep, s);
       }).filter(Boolean);
       out.blacklist = (Array.isArray(o.blacklist) ? o.blacklist : [])
@@ -314,6 +316,8 @@
     const parts = [];
     if (c) parts.push('食堂 ' + c);
     if (t) parts.push('外卖 ' + t);
+    const mine = pool.filter((x) => x.d.school).length;
+    if (mine) parts.push('本校 ' + mine);
     return head + '当前 ' + pool.length + ' 个候选（' + parts.join(' · ') + '）';
   }
 
@@ -370,6 +374,10 @@
       '<div class="meta">' +
       '<span class="chip ' + (d.r >= 4.4 ? 'hot' : '') + '">' + stars + ' ' + d.r.toFixed(1) + '</span>' +
       '<span class="chip good">' + (o.place === 'takeout' ? '外卖' : '食堂') + '</span>' +
+      // 标明数据来源：本校食堂 / 别人学校的菜单包 / 内置的全国通用参考值
+      (d.school ? '<span class="chip hot">本校</span>'
+        : d.pack ? '<span class="chip">' + esc(d.packName || '菜单包') + '</span>'
+          : '<span class="chip">通用参考</span>') +
       '</div>' +
       '<div class="tags">' + d.t.map((t) => '<span class="tag">' + esc(t) + '</span>').join('') + '</div>' +
       (d.d ? '<p class="desc">' + esc(d.d) + '</p>' : '') +
@@ -620,7 +628,8 @@
   function renderGreet() {
     const m = mealNow();
     const warm = { breakfast: '早上好', lunch: '中午好', afternoon: '下午好', dinner: '晚上好', night: '夜深了' }[m.key] || '你好';
-    $('#greet').textContent = warm + '，' + m.greet;
+    // 填了学校名就显示出来，让人一眼看出这个部署服务的是哪所学校
+    $('#greet').textContent = (SCHOOL.name ? SCHOOL.name + ' · ' : '') + warm + '，' + m.greet;
     renderMealSeg();
   }
 
@@ -725,7 +734,7 @@
         const src = document.createElement('div');
         src.className = 'hint';
         src.style.margin = '4px 0 0';
-        src.textContent = '来自菜单包：' + c.packName;
+        src.textContent = c.school ? '本校食堂菜单数据' : '来自菜单包：' + c.packName;
         el.querySelector('.grow').appendChild(src);
       }
       const edit = document.createElement('button');
@@ -1441,6 +1450,56 @@
     };
   }
 
+  /* ================= 本校信息（school.json）=================
+   * 这个部署只服务我们学校自己，不涉及其他学校。school.json 里填学校名和
+   * 本校菜单包文件名；填了之后：① 顶部显示学校名；② 访客第一次打开就自动
+   * 载入本校菜单并打上「本校」标记；③ 默认只从本校菜单里抽签。
+   * 留空时页面会明确标注内置数据是「通用参考」，不会让人误当成食堂真实菜价。
+   */
+  const SCHOOL_URL = './school.json';
+  let SCHOOL = { name: '', canteenPack: '', canteens: [] };
+
+  async function loadSchool() {
+    try {
+      const res = await fetch(SCHOOL_URL, { cache: 'no-store' });
+      if (!res.ok) return null;
+      const d = await res.json();
+      if (!d || typeof d !== 'object') return null;
+      SCHOOL = {
+        name: stripMarkup(d.name, 40),
+        canteenPack: String(d.canteenPack || '').trim(),
+        canteens: Array.isArray(d.canteens) ? d.canteens.map((c) => stripMarkup(c, 20)).filter(Boolean) : []
+      };
+      return SCHOOL;
+    } catch (e) { return null; }
+  }
+
+  function schoolDishCount() {
+    return S.custom.filter((c) => c.school).length;
+  }
+
+  async function autoLoadSchoolMenu() {
+    if (!SCHOOL.canteenPack) return null;
+    if (S.schoolLoaded === SCHOOL.canteenPack) return null;   // 已经载过（换包名会重新载）
+    const pack = {
+      id: 'school',
+      name: SCHOOL.name || '本校',
+      file: './packs/' + SCHOOL.canteenPack,
+      place: 'canteen',
+      attribution: (SCHOOL.name || '本校') + '食堂菜单（本校数据）'
+    };
+    try {
+      const r = await importPack(pack);
+      S.custom.forEach((c) => { if (c.pack === 'school') c.school = true; });
+      S.schoolLoaded = SCHOOL.canteenPack;
+      save();
+      return r;
+    } catch (e) {
+      toast('本校菜单载入失败：' + (e.message || e));
+      return null;
+    }
+  }
+
   /* ================= 校园菜单包 ================= */
   const PACKS_INDEX = './packs/index.json';
   let packsCache = null;
@@ -1573,22 +1632,35 @@
     const box = $('#packCard');
     if (!box) return;
     const mine = S.custom.length;
-    box.innerHTML =
-      '<p class="hint" style="margin-top:0">别人整理好的学校菜单，导入后抽签就完全是你身边的真实菜价。只收录有明确授权、允许再分发的数据——清华、北师等几个食堂数据仓库没有 License，所以不能收录，只能给你链接自己找作者要授权。</p>' +
-      '<div class="actions-2" style="margin-top:0"><button class="btn tiny primary" id="pkOpen">浏览可用菜单包</button>' +
-      '<button class="btn tiny" id="pkGuide">贡献我学校的</button></div>' +
-      (mine ? '<p class="hint" style="margin:10px 0 0">你已经有 ' + mine + ' 道自己的菜了。想只从这些菜里抽，去上面打开「只抽我的菜单」。</p>' : '') +
-      '<div class="switchrow" style="margin-top:10px"><div>' +
-      '<div class="sr-label">只抽我的菜单</div>' +
-      '<div class="sr-desc">导入整份学校菜单后，忽略内置的通用示例菜，避免抽到别人学校的菜</div></div>' +
+    const schoolCount = schoolDishCount();
+    const schoolLabel = SCHOOL.name || '本校';
+    // 明确标明本校数据的状态：站里到底有没有你们食堂的真实数据
+    const status = schoolCount
+      ? '<p class="hint" style="margin:0 0 8px"><b>' + esc(schoolLabel) + '菜单：已载入 ' + schoolCount + ' 道菜</b>' +
+        '（在抽签结果上会标「本校」）</p>'
+      : (SCHOOL.name
+        ? '<p class="hint" style="margin:0 0 8px"><b>' + esc(SCHOOL.name) + '菜单：尚未录入。</b>' +
+          '现在抽签用的是内置的全国通用参考值，价格和菜名都不是你们食堂的实际情况。</p>'
+        : '<p class="hint" style="margin:0 0 8px"><b>本校菜单尚未录入。</b>' +
+          '现在抽签用的是内置的 127 道全国通用参考菜（结果会标「通用参考」），不是你们食堂的真实菜价。</p>');
+
+    box.innerHTML = status +
+      '<div class="switchrow" style="margin-top:0"><div>' +
+      '<div class="sr-label">只抽本校/我自己的菜单</div>' +
+      '<div class="sr-desc">打开后忽略内置的通用参考菜，避免把参考价当成食堂实际价格</div></div>' +
       '<label class="switch"><input type="checkbox" id="onlyMineChk"' + (S.filters.onlyMine ? ' checked' : '') + '>' +
-      '<span class="track"></span><span class="thumb"></span></label></div>';
+      '<span class="track"></span><span class="thumb"></span></label></div>' +
+      (mine ? '<p class="hint" style="margin:8px 0 0">你一共有 ' + mine + ' 道自己的菜（含本校菜单和手动添加的）。</p>' : '') +
+      '<h2 style="margin:14px 0 6px;font-size:13px">其他菜单包 <span class="sub">可选，这个部署平时用不到</span></h2>' +
+      '<p class="hint" style="margin:0 0 8px">别人整理好的学校菜单（目前只有一份深大的示例）。本站只服务我们学校自己，所以这部分只是留个格式参考，不会自动载入。</p>' +
+      '<div class="actions-2" style="margin-top:0"><button class="btn tiny" id="pkOpen">浏览可用菜单包</button>' +
+      '<button class="btn tiny" id="pkGuide">菜单包格式说明</button></div>';
     $('#pkOpen', box).onclick = () => openPacks(false);
     $('#pkGuide', box).onclick = () => openPackGuide();
     $('#onlyMineChk', box).onchange = (ev) => {
       S.filters.onlyMine = ev.target.checked;
       save(); renderPick(); renderFilters();
-      toast(ev.target.checked ? '现在只从你自己的菜单里抽' : '已恢复：内置示例菜也参与抽签');
+      toast(ev.target.checked ? '现在只从本校/你自己的菜单里抽' : '已恢复：内置通用参考菜也参与抽签');
     };
   }
 
@@ -1714,4 +1786,20 @@
   renderCouponCard();
   renderPackCard();
   renderPick();
+
+  // 学校信息是异步取的，拿到之后再刷新受影响的几块
+  (async () => {
+    await loadSchool();
+    if (SCHOOL.name) { renderGreet(); renderPackCard(); }
+    const r = await autoLoadSchoolMenu();
+    if (r) {
+      // 本校菜单进来了就默认只抽本校的，免得参考价混进来
+      S.filters.onlyMine = true;
+      save();
+      renderMe(); renderPackCard(); renderPick();
+      toast('已载入' + (SCHOOL.name || '本校') + '菜单 ' + r.added + ' 道，默认只抽本校的菜');
+    } else if (SCHOOL.name || SCHOOL.canteenPack) {
+      renderMe(); renderPackCard();
+    }
+  })();
 })();
