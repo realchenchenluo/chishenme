@@ -1032,26 +1032,47 @@
     wrap.innerHTML =
       '<div style="background:var(--card);width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom));border:1px solid var(--line)">' +
       '<h2 style="margin:0 0 8px;font-size:16px">批量粘贴</h2>' +
-      '<p class="hint">一行一个菜。格式：<code>菜名, 价格, 等待分钟, 好吃度, 标签</code>，后面几项可以省略。<br>例：<code>三楼红烧肉, 15, 10, 4.6, 米饭/猪肉</code></p>' +
+      '<p class="hint" id="b_tip">一行一个菜。格式：<code>菜名, 价格, 等待分钟, 好吃度, 标签</code>，后面几项可以省略。<br>例：<code>三楼红烧肉, 15, 10, 4.6, 米饭/猪肉</code></p>' +
       '<textarea id="b_txt" style="margin-top:10px" placeholder="三楼红烧肉, 15, 10, 4.6, 米饭/猪肉&#10;楼下沙县拌面 10 8&#10;鸡蛋灌饼"></textarea>' +
-      '<label class="field" style="margin-top:10px"><span class="fl">这些菜在哪个食堂 / 窗口（可选）</span>' +
-      '<input type="text" id="b_w" placeholder="例：一食堂二楼"></label>' +
       '<label class="field" style="margin-top:10px"><span class="fl">这些菜在哪儿</span><select id="b_p">' +
       '<option value="canteen">食堂 / 校内</option><option value="takeout">外卖</option><option value="both">两边都有</option></select></label>' +
+      '<label class="field" style="margin-top:10px"><span class="fl" id="b_w_lab">在哪个食堂 / 窗口（可选）</span>' +
+      '<input type="text" id="b_w" placeholder="例：一食堂二楼" value=""></label>' +
       '<div class="actions-2"><button class="btn" id="b_cancel">取消</button><button class="btn primary" id="b_save">全部导入</button></div>' +
       '</div>';
     document.body.appendChild(wrap);
     const close = () => { wrap.remove(); };
+
+    // 选「外卖」时，字段含义和默认值都换一套：外卖要的是平台/店名和配送时间，
+    // 价格就是实付价（同时作为外卖价），不像食堂那样另有堂食价
+    const syncPlace = () => {
+      const p = $('#b_p', wrap).value;
+      if (p === 'takeout') {
+        $('#b_w_lab', wrap).textContent = '平台 / 店名（可选，会显示在结果里帮你找到它）';
+        $('#b_w', wrap).placeholder = '例：美团 · 大学城店';
+        $('#b_tip', wrap).innerHTML = '一行一个店。格式：<code>店名, 人均, 配送分钟, 好吃度, 标签</code>，后面几项可省略。<br>例：<code>塔斯汀, 22, 35, 4.5, 汉堡/鸡肉</code>';
+      } else {
+        $('#b_w_lab', wrap).textContent = '在哪个食堂 / 窗口（可选）';
+        $('#b_w', wrap).placeholder = '例：一食堂二楼';
+        $('#b_tip', wrap).innerHTML = '一行一个菜。格式：<code>菜名, 价格, 等待分钟, 好吃度, 标签</code>，后面几项可以省略。<br>例：<code>三楼红烧肉, 15, 10, 4.6, 米饭/猪肉</code>';
+      }
+    };
+    $('#b_p', wrap).onchange = syncPlace;
+
     $('#b_cancel', wrap).onclick = close;
     $('#b_save', wrap).onclick = () => {
       const p = $('#b_p', wrap).value;
-      const bw = $('#b_w', wrap).value.trim();   // 这批菜共用的食堂/窗口
+      const bw = $('#b_w', wrap).value.trim();   // 这批菜共用的食堂/窗口（外卖时是平台/店名）
       const lines = $('#b_txt', wrap).value.split('\n').map((s) => s.trim()).filter(Boolean);
       let added = 0;
       lines.forEach((line) => {
         const parsed = parseLine(line);
         if (!parsed) return;
-        const s = sanitizeDish(Object.assign({ p: p, w: bw, wait: [8, 15], tp: [16, 24], tw: [30, 45], d: '' }, parsed));
+        // 外卖：价格即实付价，配送时间用粘贴里的第二个数字（没写就给个常见区间）
+        const base = p === 'takeout'
+          ? { p: 'takeout', w: bw, price: parsed.price, tp: parsed.price, wait: parsed.wait, tw: parsed.wait, d: '' }
+          : { p: p, w: bw, wait: [8, 15], d: '' };
+        const s = sanitizeDish(Object.assign(base, parsed, p === 'takeout' ? { tp: parsed.price, tw: parsed.wait } : {}));
         if (!s) return;
         const exist = S.custom.find((x) => x.n === s.n);
         const dish = Object.assign({ id: 'c:' + s.n, builtin: false }, s);
@@ -1553,11 +1574,39 @@
     return row;
   }
 
-  function openCoupons(place) {
-    const s = openSheet('今日外卖券',
+  // 从一道外卖菜里取出"能在 App 里搜到的词"：
+  // 优先用平台/店名字段，没有就退回菜名（去掉括号备注、取品牌部分）
+  function shopSearchTerm(d) {
+    if (!d) return '';
+    const w = String(d.w || '').split('·').pop().trim();
+    if (w) return w;
+    return String(d.n || '')
+      .replace(/[（(][^)）]*[)）]/g, '')   // 去掉括号备注，如「螺蛳粉（外卖）」
+      .split('+')[0]                       // 套餐里的加项不算店名，如「正新鸡排+饮料」
+      .split(/\s+/)[0]
+      .trim();
+  }
+
+  function openCoupons(place, dish) {
+    // 「找店 + 领券」放在一起：先照着词去 App 里搜到店，再用下面的口令领券，
+    // 这样"抽到的菜 / 真实存在的店 / 能用的券"才是串起来的
+    const shopName = dish ? dish.n : '';
+    const term = shopSearchTerm(dish);
+    const shopBlock = shopName
+      ? '<div class="item" style="border:0;padding:0 0 10px;gap:8px">' +
+        '<div class="grow"><div class="name">抽到的是：' + esc(shopName) + '</div>' +
+        '<div class="sub2">在外卖 App 里搜「' + esc(term) + '」找到店，再用下面的口令领券</div></div>' +
+        '<button class="btn tiny" id="cpCopyShop">复制搜索词</button></div>'
+      : '';
+    const s = openSheet('外卖券',
+      shopBlock +
       '<p class="hint" style="margin-top:0" id="cpHint">正在取券…</p>' +
       '<div id="cpList" class="list"></div>' +
       '<div class="actions-2"><a class="btn tiny" href="' + esc(couponUrl()) + '" target="_blank" rel="noopener noreferrer">打开完整页面</a></div>');
+    if (shopName) {
+      const b = $('#cpCopyShop', s.wrap);
+      if (b) b.onclick = () => copyText(term, '已复制「' + term + '」，去外卖 App 里搜它');
+    }
     (async () => {
       const hint = $('#cpHint', s.wrap);
       const list = $('#cpList', s.wrap);
@@ -1904,7 +1953,7 @@
   $('#likeBtn').onclick = () => vote('like');
   $('#dislikeBtn').onclick = () => vote('dislike');
   $('#shareBtn').onclick = shareResult;
-  $('#couponBtn').onclick = () => openCoupons('takeout');
+  $('#couponBtn').onclick = () => openCoupons('takeout', current && current.d ? current.d : null);
   $('#patchBtn').onclick = () => { if (current) openEditor(current.d, !!S.custom.find((x) => x.id === current.d.id)); };
   $('#clearHistory').onclick = () => {
     if (confirm('清空全部就餐记录？自建菜单和黑名单不受影响。')) {
