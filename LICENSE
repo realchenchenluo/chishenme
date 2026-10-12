@@ -2,6 +2,11 @@ MIT License
 
 Copyright (c) 2026 realchenchenluo
 
+Note on data: the MIT license above covers the source code of this project.
+Data files under packs/ keep their own licenses, listed in packs/index.json
+and packs/README.md. For example packs/szu-nanqu-2f.json is licensed under
+CC BY 4.0 (from ljunnan24-hash/recipe), not MIT, and requires attribution.
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights

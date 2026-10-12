@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "intro": "校园菜单包：别人整理好的学校食堂/周边菜单，导入后直接用你自己的真实数据抽签。只收录有明确授权、允许再分发的数据。",
+  "packs": [
+    {
+      "id": "szu-nanqu-2f",
+      "name": "深圳大学 · 南区二楼食堂",
+      "school": "深圳大学",
+      "city": "深圳",
+      "place": "canteen",
+      "count": 185,
+      "file": "./packs/szu-nanqu-2f.json",
+      "source": "ljunnan24-hash/recipe",
+      "sourceUrl": "https://github.com/ljunnan24-hash/recipe",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "exportDate": "2026-08-28",
+      "attribution": "数据：ljunnan24-hash，《2026年深圳大学南区二楼食堂菜谱》（菜品来源：深圳大学南区二楼食堂菜单），CC BY 4.0。",
+      "modified": "本站做了这些转换：字段改名并对齐本站格式；菜名与价格原样保留；按菜名和原数据备注推断口味/食材标签；按窗口类型补充了等待时间估算（源数据无此字段）；好吃度源数据没有，统一填 4.2。标签和等待时间是推断值，不是原数据。",
+      "note": "源数据没有评分，所以 185 道菜的好吃度都是 4.2，想吃哪家还得看你自己；等待时间按窗口类型估的，可以逐条改。"
+    }
+  ],
+  "howToContribute": {
+    "summary": "把你学校的菜单整理成同样格式，提 PR 或发 issue 给我们，审核通过后所有人搜索就能看到。",
+    "rules": [
+      "只提交你有权共享的数据：自己整理的、或明确带许可（如 CC BY / MIT）的。别人仓库没有 License 的数据不要提交。",
+      "不要从美团、大众点评、小红书等平台搬运评价原文——那是第三方内容，有版权问题。",
+      "菜名和价格尽量准确；推断出来的字段（标签、等待时间、评分）要在 note 里说明是推断的。",
+      "注明数据来源和署名方式，方便我们写进 packs/index.json。"
+    ],
+    "file": "./packs/README.md"
+  }
+}

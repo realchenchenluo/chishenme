@@ -36,9 +36,9 @@
   ];
 
   const DIETS = [
-    ['牛肉', '不吃牛肉'], ['羊肉', '不吃羊肉'], ['猪肉', '不吃猪肉'], ['海鲜', '不吃海鲜'],
-    ['内脏', '不吃内脏'], ['香菜', '不要香菜'], ['蛋', '不吃蛋'], ['油炸', '不吃油炸'],
-    ['甜', '不吃甜'], ['辣', '一点辣都不行']
+    ['牛肉', '不吃牛肉'], ['羊肉', '不吃羊肉'], ['猪肉', '不吃猪肉'], ['鸡肉', '不吃鸡肉'],
+    ['鸭肉', '不吃鸭肉'], ['海鲜', '不吃海鲜'], ['内脏', '不吃内脏'], ['香菜', '不要香菜'],
+    ['蛋', '不吃蛋'], ['油炸', '不吃油炸'], ['甜', '不吃甜'], ['辣', '一点辣都不行']
   ];
 
   const MEALS = [
@@ -54,7 +54,7 @@
 
   /* ================= 状态 ================= */
   const DEFAULTS = {
-    filters: { place: 'any', budget: 20, wait: 30, cats: [], spicy: 'any', mode: 'balance', skipRecent: true },
+    filters: { place: 'any', budget: 20, wait: 30, cats: [], spicy: 'any', mode: 'balance', skipRecent: true, onlyMine: false },
     diet: {},
     blacklist: [],   // [{id, name}]
     history: [],     // [{id, name, price, place, meal, ts}]
@@ -172,6 +172,7 @@
     const recent = F.skipRecent ? recentIds() : new Set();
     const pool = [];
     for (const d of allDishes()) {
+      if (F.onlyMine && d.builtin) continue;   // 只抽我导入/自建的菜单
       if (blocked.has(d.id)) continue;
       if (recent.has(d.id)) continue;
       if (skipSession && sessionSeen.has(d.id)) continue;
@@ -279,7 +280,7 @@
 
   function poolSummary() {
     const pool = buildPool(false);
-    const head = S.loc && S.loc.city ? '📍' + S.loc.city + ' · ' : '';
+    const head = S.loc && S.loc.city ? S.loc.city + ' · ' : '';
     if (!pool.length) return head + '当前条件下没有候选，往下滑放宽一点试试';
     const c = pool.filter((x) => x.offer.place === 'canteen').length;
     const t = pool.length - c;
@@ -341,12 +342,13 @@
       '<div class="reveal">' +
       '<div class="meta">' +
       '<span class="chip ' + (d.r >= 4.4 ? 'hot' : '') + '">' + stars + ' ' + d.r.toFixed(1) + '</span>' +
-      '<span class="chip good">' + (o.place === 'takeout' ? '🛵 外卖' : '🏫 食堂') + '</span>' +
+      '<span class="chip good">' + (o.place === 'takeout' ? '外卖' : '食堂') + '</span>' +
       '</div>' +
       '<div class="tags">' + d.t.map((t) => '<span class="tag">' + t + '</span>').join('') + '</div>' +
       (d.d ? '<p class="desc">' + d.d + '</p>' : '') +
       '<div class="why">抽中理由：' + whyText(d, o, buildPool(false)) + '</div>' +
       (altTxt ? '<div class="alt">' + altTxt + '</div>' : '') +
+      (d.source ? '<div class="alt">' + esc(d.source) + '</div>' : '') +
       (o.place === 'takeout' && o.adjusted
         ? '<div class="alt">外卖价和配送时长按「' + ((S.loc && GEO.TIER_LABEL[S.loc.tier]) || '本地') + '」估算过，不是真实报价</div>'
         : '') +
@@ -355,7 +357,7 @@
     $('#resultActions').hidden = false;
     $('#resultActions2').hidden = false;
     $('#couponBtn').hidden = o.place !== 'takeout';   // 抽到外卖才提示领券
-    $('#rollBtn').textContent = '🎲 再抽一次';
+    $('#rollBtn').textContent = '再抽一次';
     $('#rollBtn').disabled = false;
     $('#poolInfo').textContent = poolSummary();
 
@@ -367,7 +369,7 @@
   function showEmptyPool() {
     const fix = diagnose();
     resultBox.innerHTML =
-      '<div class="empty"><div class="big">🥲</div>' +
+      '<div class="empty">' +
       '<p>满足这些条件的菜一个都没有，条件卡太死了。</p>' +
       (fix ? '<p class="hint">' + fix.msg + '，能多出 ' + fix.gain + ' 个候选</p>' +
              '<button class="btn primary fixbtn" id="fixBtn">一键放宽</button>' : '') +
@@ -391,6 +393,7 @@
       { msg: '清空「想吃哪类」筛选', apply: () => { S.filters.cats = []; } },
       { msg: '把辣度改成随便', apply: () => { S.filters.spicy = 'any'; } },
       { msg: '允许推荐最近吃过的', apply: () => { S.filters.skipRecent = false; } },
+      { msg: '关掉「只抽我的菜单」', apply: () => { S.filters.onlyMine = false; } },
       { msg: '食堂和外卖都放开', apply: () => { S.filters.place = 'any'; } },
       { msg: '临时忽略忌口设置', apply: () => { S.diet = {}; } }
     ];
@@ -436,10 +439,10 @@
     });
     S.history = S.history.slice(0, 300);
     save(); renderLog();
-    toast('已记下：' + d.n + '，今天就这么定了 🍽');
+    toast('已记下：' + d.n + '，今天就这么定了');
     $('#acceptBtn').disabled = true;
-    $('#acceptBtn').textContent = '✅ 已记录';
-    setTimeout(() => { $('#acceptBtn').disabled = false; $('#acceptBtn').textContent = '✅ 就吃这个'; }, 1600);
+    $('#acceptBtn').textContent = '已记录';
+    setTimeout(() => { $('#acceptBtn').disabled = false; $('#acceptBtn').textContent = '就吃这个'; }, 1600);
   }
 
   function blockCurrent() {
@@ -454,8 +457,8 @@
   function vote(kind) {
     if (!current) return;
     const id = current.d.id;
-    if (kind === 'like') { S.likes[id] = (S.likes[id] || 0) + 1; toast('👍 记下了，这道菜以后更容易被抽中'); }
-    else { S.dislikes[id] = (S.dislikes[id] || 0) + 1; toast('👎 记下了，这道菜会变难抽中'); }
+    if (kind === 'like') { S.likes[id] = (S.likes[id] || 0) + 1; toast('记下了，这道菜以后更容易被抽中'); }
+    else { S.dislikes[id] = (S.dislikes[id] || 0) + 1; toast('记下了，这道菜会变难抽中'); }
     save();
   }
 
@@ -691,6 +694,13 @@
       if (c.wait) parts.push('等 ' + (c.wait[0] === c.wait[1] ? c.wait[0] : c.wait[0] + '–' + c.wait[1]) + ' 分钟');
       if (c.t && c.t.length) parts.push(c.t.join('/'));
       const el = itemEl(c.n, parts.join(' · '), '★' + (c.r || 4).toFixed(1), 'stars');
+      if (c.packName) {
+        const src = document.createElement('div');
+        src.className = 'hint';
+        src.style.margin = '4px 0 0';
+        src.textContent = '来自菜单包：' + c.packName;
+        el.querySelector('.grow').appendChild(src);
+      }
       const edit = document.createElement('button');
       edit.className = 'btn tiny ghost'; edit.textContent = '改';
       edit.onclick = () => openEditor(c, true);
@@ -720,6 +730,8 @@
       el.appendChild(undo);
       bl.appendChild(el);
     });
+
+    renderPackCard();
   }
 
   /* ---------- 编辑 / 新建弹层 ---------- */
@@ -984,7 +996,7 @@
     const L = S.loc;
     if (!L || !L.city) return '还没定位';
     const t = L.tier ? '（' + (GEO.TIER_LABEL[L.tier] || '等级未知') + '）' : '';
-    return '📍 ' + L.city + (L.district ? ' · ' + L.district : '') + t;
+    return L.city + (L.district ? ' · ' + L.district : '') + t;
   }
   function importedCount() {
     return S.custom.filter((c) => c.from === 'gaode').length;
@@ -1086,7 +1098,7 @@
       '<p class="hint" style="margin-top:0">以「' + esc(anchor.src) + '」为圆心，半径 ' + radiusLabel() + '，按直线距离排序。' +
       (anchor.exact ? '' : '<b>这不是你的实时位置</b>，搜出来的店可能离你较远；想让结果更准就先去定位。') +
       '评分和人均是高德地图的数据，<b>不是美团/大众点评的</b>，导入后可以自己改。</p>' +
-      '<div class="actions-2"><button class="btn primary wide" id="nbGo">🔍 开始搜索</button></div>' +
+      '<div class="actions-2"><button class="btn primary wide" id="nbGo">开始搜索</button></div>' +
       '<div id="nbList" class="list" style="margin-top:10px"></div>' +
       '<div id="nbBox" hidden>' +
       '<label class="field" style="margin-top:10px"><span class="fl">这些店算哪种渠道</span><select id="nbPlace">' +
@@ -1105,7 +1117,7 @@
             $('#nbList', wrap).innerHTML = '<p class="hint">' + esc(e.message || '搜索失败') + '</p>';
           }
           btn.disabled = false;
-          btn.textContent = '🔍 再搜一次';
+          btn.textContent = '再搜一次';
           if (!results.length) {
             if (!$('#nbList', wrap).innerHTML) {
               $('#nbList', wrap).innerHTML = '<p class="hint">这个半径里没搜到餐饮店。可以把半径调大一点再试（半径在「我的 → 定位与本地数据」里改）。</p>';
@@ -1156,9 +1168,9 @@
     if (!L) {
       box.innerHTML =
         '<p class="hint" style="margin-top:0">定位后可以：按你所在城市估算外卖价和配送时长；配一个免费的高德 Key，还能搜出你周边的真实餐厅一键加进菜单。</p>' +
-        '<div class="actions-2" style="margin-top:0"><button class="btn primary" id="locBtn">📍 用当前位置</button>' +
+        '<div class="actions-2" style="margin-top:0"><button class="btn primary" id="locBtn">用当前位置</button>' +
         '<button class="btn" id="cityBtn">手动选城市</button>' +
-        '<button class="btn" id="nearbyBtn">🔍 找周边吃的</button></div>';
+        '<button class="btn" id="nearbyBtn">找周边吃的</button></div>';
     } else {
       box.innerHTML =
         '<div class="item" style="border:0;padding:0 0 8px"><div class="grow">' +
@@ -1168,7 +1180,7 @@
         (f ? '<p class="hint" style="margin:0 0 8px">外卖价 ×' + f.price + '、配送时长 ×' + f.wait +
           '（按「' + (GEO.TIER_LABEL[L.tier] || '') + '」估算，不是真实报价，可关）</p>' : '') +
         (importedCount() ? '<p class="hint" style="margin:0 0 8px">已导入 ' + importedCount() + ' 家周边店铺</p>' : '') +
-        '<div class="actions-2" style="margin-top:0"><button class="btn primary" id="nearbyBtn">🔍 找周边吃的</button>' +
+        '<div class="actions-2" style="margin-top:0"><button class="btn primary" id="nearbyBtn">找周边吃的</button>' +
         '<button class="btn" id="locBtn">重新定位</button>' +
         '<button class="btn" id="cityBtn">改城市</button></div>';
     }
@@ -1189,7 +1201,7 @@
         : (L && L.lat ? '坐标 ' + L.lat + ', ' + L.lon + '（截断到约 100 米精度）' : '定位只用来判断城市，坐标不上传任何服务器——这个网站没有服务器')) + '</div>' +
       '</div></div>' +
       '<div class="actions-2" style="margin:0 0 12px">' +
-      '<button class="btn tiny" id="setLocBtn">📍 定位</button>' +
+      '<button class="btn tiny" id="setLocBtn">定位</button>' +
       '<button class="btn tiny" id="setCityBtn">手动选城市</button>' +
       (L ? '<button class="btn tiny danger" id="clearLocBtn">清除定位</button>' : '') +
       '</div>' +
@@ -1211,7 +1223,7 @@
       [500, 1000, 2000, 3000, 5000].map((r) =>
         '<button class="pill' + (S.radius === r ? ' on' : '') + '" data-r="' + r + '">' + radiusLabel(r) + '</button>').join('') +
       '</div></div>' +
-      '<div class="actions-2" style="margin-top:0"><button class="btn tiny primary" id="nearbyBtn2">🔍 现在搜一次周边餐饮</button></div>';
+      '<div class="actions-2" style="margin-top:0"><button class="btn tiny primary" id="nearbyBtn2">现在搜一次周边餐饮</button></div>';
 
     $('#setLocBtn', box).onclick = () => doLocate();
     $('#setCityBtn', box).onclick = () => openCityPicker();
@@ -1298,7 +1310,7 @@
     if (!box) return;
     box.innerHTML =
       '<p class="hint" style="margin-top:0">券来自隔壁的「优惠猎手」项目（走官方和公开券接口，不爬 App、不绕风控）。抽到外卖时顺手看一眼今天有没有能用的券。</p>' +
-      '<div class="actions-2" style="margin-top:0"><button class="btn tiny primary" id="cpOpen">🎟 看今天的券</button>' +
+      '<div class="actions-2" style="margin-top:0"><button class="btn tiny primary" id="cpOpen">看今天的券</button>' +
       '<a class="btn tiny" href="' + couponUrl() + '" target="_blank" rel="noopener">打开优惠猎手</a></div>' +
       '<label class="field" style="margin-top:12px"><span class="fl">优惠页地址（默认就是优惠猎手，可换成你自己的部署）</span>' +
       '<input type="text" id="cpUrl" value="' + esc(couponUrl()) + '"></label>' +
@@ -1307,6 +1319,158 @@
     $('#cpUrlSave', box).onclick = () => {
       S.couponUrl = $('#cpUrl', box).value.trim();
       save(); renderCouponCard(); toast('地址已保存');
+    };
+  }
+
+  /* ================= 校园菜单包 ================= */
+  const PACKS_INDEX = './packs/index.json';
+  let packsCache = null;
+
+  async function loadPacks(force) {
+    if (packsCache && !force) return packsCache;
+    const res = await fetch(PACKS_INDEX + (force ? '?t=' + Date.now() : ''), { cache: 'no-store' });
+    if (!res.ok) throw new Error('取不到菜单包列表（HTTP ' + res.status + '）');
+    packsCache = await res.json();
+    return packsCache;
+  }
+
+  function packImportedCount(packId) {
+    return S.custom.filter((c) => c.pack === packId).length;
+  }
+
+  async function importPack(pack) {
+    const res = await fetch(pack.file, { cache: 'no-store' });
+    if (!res.ok) throw new Error('下载菜单包失败（HTTP ' + res.status + '）');
+    const data = await res.json();
+    const list = data.dishes || [];
+    let added = 0, updated = 0;
+    list.forEach((d) => {
+      if (!d || !d.n) return;
+      const dish = {
+        // 用包内稳定编号做 id：同一道菜在不同窗口各有一份时不会被合并
+        id: 'k:' + pack.id + ':' + (d.k !== undefined && d.k !== null ? d.k : d.n),
+        builtin: false,
+        pack: pack.id,
+        packName: pack.name,
+        source: pack.attribution || '',
+        n: d.n,
+        p: d.p || pack.place || 'canteen',
+        price: d.price || [12, 18],
+        wait: d.wait || [5, 15],
+        r: typeof d.r === 'number' ? d.r : 4.0,
+        t: (d.t && d.t.length) ? d.t : ['套餐'],
+        d: d.d || ''
+      };
+      if (d.tp) dish.tp = d.tp;
+      if (d.tw) dish.tw = d.tw;
+      const exist = S.custom.find((x) => x.id === dish.id);
+      if (exist) { Object.assign(exist, dish); updated++; } else { S.custom.push(dish); added++; }
+    });
+    save();
+    return { added: added, updated: updated, count: list.length };
+  }
+
+  function openPacks(force) {
+    const s = openSheet('校园菜单包',
+      '<p class="hint" style="margin-top:0">别人整理好的学校菜单，导入后抽签用的就是你身边的真实菜价。这里的包都经过授权核对，来源和许可写在每一项下面。</p>' +
+      '<div id="pkList" class="list"></div>' +
+      '<div class="actions-2"><a class="btn tiny" href="https://github.com/realchenchenluo/chishenme/tree/main/packs" target="_blank" rel="noopener">在 GitHub 上看全部</a>' +
+      '<button class="btn tiny" id="pkHow">怎么贡献我学校的</button></div>');
+    const listBox = $('#pkList', s.wrap);
+    $('#pkHow', s.wrap).onclick = () => { s.close(); openPackGuide(); };
+    (async () => {
+      listBox.innerHTML = '<p class="hint">正在取列表…</p>';
+      try {
+        const idx = await loadPacks(force);
+        const packs = idx.packs || [];
+        if (!packs.length) { listBox.innerHTML = '<p class="hint">还没有收录任何菜单包。</p>'; return; }
+        listBox.innerHTML = '';
+        packs.forEach((p) => {
+          const done = packImportedCount(p.id);
+          const row = document.createElement('div');
+          row.className = 'item';
+          row.style.flexDirection = 'column';
+          row.style.alignItems = 'stretch';
+          row.innerHTML =
+            '<div style="display:flex;gap:10px;align-items:flex-start">' +
+            '<div class="grow"><div class="name">' + esc(p.name) + '</div>' +
+            '<div class="sub2">' + esc([p.city, p.count + ' 道菜', p.license, '数据来自 ' + p.source].filter(Boolean).join(' · ')) + '</div>' +
+            '</div></div>' +
+            (p.attribution ? '<div class="codebox" style="font-family:inherit;font-size:11.5px">' + esc(p.attribution) + '</div>' : '') +
+            (p.note ? '<p class="hint" style="margin:6px 0 0">' + esc(p.note) + '</p>' : '') +
+            (done ? '<p class="hint" style="margin:6px 0 0">已导入 ' + done + ' 道</p>' : '') +
+            '<div class="actions-2" style="margin-top:8px"><button class="btn tiny primary" data-import>导入</button>' +
+            (p.sourceUrl ? '<a class="btn tiny" href="' + esc(p.sourceUrl) + '" target="_blank" rel="noopener">看原始数据</a>' : '') +
+            '</div>';
+          row.querySelector('[data-import]').onclick = async (ev) => {
+            const btn = ev.target;
+            btn.disabled = true;
+            btn.textContent = '导入中…';
+            try {
+              const r = await importPack(p);
+              renderMe(); renderPick();
+              toast('已导入 ' + r.added + ' 道菜' + (r.updated ? '（更新 ' + r.updated + ' 道）' : '') + '，抽签已经能用');
+              btn.textContent = '重新导入';
+              btn.disabled = false;
+            } catch (e) {
+              btn.textContent = '重试';
+              btn.disabled = false;
+              toast(e.message || '导入失败');
+            }
+          };
+          listBox.appendChild(row);
+        });
+      } catch (e) {
+        listBox.innerHTML = '<p class="hint">' + esc(e.message || '取不到列表') + '。联网后重试，或者直接去 GitHub 看。</p>';
+      }
+    })();
+  }
+
+  function openPackGuide() {
+    openSheet('贡献你学校的菜单',
+      '<p class="hint" style="margin-top:0">你把自己学校食堂的菜录一遍，全校同学都能直接用。流程不复杂：</p>' +
+      '<ol style="padding-left:18px;margin:0;font-size:13.5px;line-height:1.9">' +
+      '<li>先点下面的「导出我的菜单」，拿到 JSON 文件（里面就是你添加的菜）。</li>' +
+      '<li>在 GitHub 上给 <a href="https://github.com/realchenchenluo/chishenme" target="_blank" rel="noopener">chishenme</a> 开一个 issue，把 JSON 贴上去；或者直接提 PR，把文件放进 <code>packs/</code> 并更新 <code>packs/index.json</code>。</li>' +
+      '<li>我们核对来源和许可后收录，所有人就能在「校园菜单包」里搜到你学校。</li>' +
+      '</ol>' +
+      '<p class="hint"><b>一条硬规矩</b>：只提交你有权共享的数据。自己一道道敲的没问题；从网上搬的必须有明确许可（CC BY、MIT 等），并且要写清署名。没有 License 的仓库数据不要搬，也不要从美团/大众点评/小红书抄评价原文。</p>' +
+      '<div class="actions-2"><button class="btn tiny primary" id="pkExport">导出我的菜单</button>' +
+      '<a class="btn tiny" href="https://github.com/realchenchenluo/chishenme/blob/main/packs/README.md" target="_blank" rel="noopener">看格式说明</a></div>',
+      (wrap, close) => {
+        $('#pkExport', wrap).onclick = () => {
+          const payload = { v: 1, kind: 'pack', at: new Date().toISOString(), dishes: S.custom };
+          const blob = new Blob([JSON.stringify(payload, null, 1)], { type: 'application/json' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = '我的菜单包-' + new Date().toISOString().slice(0, 10) + '.json';
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+          toast('已导出，去 GitHub 开 issue 贴上去就行');
+        };
+      });
+  }
+
+  function renderPackCard() {
+    const box = $('#packCard');
+    if (!box) return;
+    const mine = S.custom.length;
+    box.innerHTML =
+      '<p class="hint" style="margin-top:0">别人整理好的学校菜单，导入后抽签就完全是你身边的真实菜价。只收录有明确授权、允许再分发的数据——清华、北师等几个食堂数据仓库没有 License，所以不能收录，只能给你链接自己找作者要授权。</p>' +
+      '<div class="actions-2" style="margin-top:0"><button class="btn tiny primary" id="pkOpen">浏览可用菜单包</button>' +
+      '<button class="btn tiny" id="pkGuide">贡献我学校的</button></div>' +
+      (mine ? '<p class="hint" style="margin:10px 0 0">你已经有 ' + mine + ' 道自己的菜了。想只从这些菜里抽，去上面打开「只抽我的菜单」。</p>' : '') +
+      '<div class="switchrow" style="margin-top:10px"><div>' +
+      '<div class="sr-label">只抽我的菜单</div>' +
+      '<div class="sr-desc">导入整份学校菜单后，忽略内置的通用示例菜，避免抽到别人学校的菜</div></div>' +
+      '<label class="switch"><input type="checkbox" id="onlyMineChk"' + (S.filters.onlyMine ? ' checked' : '') + '>' +
+      '<span class="track"></span><span class="thumb"></span></label></div>';
+    $('#pkOpen', box).onclick = () => openPacks(false);
+    $('#pkGuide', box).onclick = () => openPackGuide();
+    $('#onlyMineChk', box).onchange = (ev) => {
+      S.filters.onlyMine = ev.target.checked;
+      save(); renderPick(); renderFilters();
+      toast(ev.target.checked ? '现在只从你自己的菜单里抽' : '已恢复：内置示例菜也参与抽签');
     };
   }
 
@@ -1430,5 +1594,6 @@
   renderLoc();
   renderLocSettings();
   renderCouponCard();
+  renderPackCard();
   renderPick();
 })();

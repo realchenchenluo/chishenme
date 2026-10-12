@@ -19,13 +19,18 @@
 
   <header class="topbar">
     <div class="brand">
-      <div class="logo" aria-hidden="true">🍚</div>
+      <img class="logo" src="./icon.svg" width="42" height="42" alt="">
       <div>
         <h1>今天吃什么</h1>
         <p class="greet" id="greet">正在读取时间…</p>
       </div>
     </div>
-    <button class="icon-btn" id="themeBtn" title="切换深色/浅色" aria-label="切换深色模式">🌗</button>
+    <button class="icon-btn" id="themeBtn" title="切换深色/浅色" aria-label="切换深色模式">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="4.2"></circle>
+        <path d="M12 3.2v2.1M12 18.7v2.1M3.2 12h2.1M18.7 12h2.1M5.8 5.8l1.5 1.5M16.7 16.7l1.5 1.5M18.2 5.8l-1.5 1.5M7.3 16.7l-1.5 1.5"></path>
+      </svg>
+    </button>
   </header>
 
   <main>
@@ -41,19 +46,19 @@
 
         <div id="result" hidden></div>
 
-        <button class="btn primary wide big" id="rollBtn">🎲 抽一下</button>
+        <button class="btn primary wide big" id="rollBtn">抽一下</button>
 
         <div class="actions" id="resultActions" hidden>
-          <button class="btn" id="againBtn">🔄 换一个</button>
-          <button class="btn primary" id="acceptBtn">✅ 就吃这个</button>
+          <button class="btn" id="againBtn">换一个</button>
+          <button class="btn primary" id="acceptBtn">就吃这个</button>
         </div>
         <div class="actions-2 many" id="resultActions2" hidden>
-          <button class="btn tiny" id="shareBtn">📋 发给同学</button>
-          <button class="btn tiny" id="likeBtn">👍 好吃</button>
-          <button class="btn tiny" id="dislikeBtn">👎 踩雷</button>
-          <button class="btn tiny" id="blockBtn">🚫 别再推</button>
-          <button class="btn tiny" id="patchBtn">✏️ 改价</button>
-          <button class="btn tiny" id="couponBtn" hidden>🎟 外卖券</button>
+          <button class="btn tiny" id="shareBtn">发给同学</button>
+          <button class="btn tiny" id="likeBtn">好吃</button>
+          <button class="btn tiny" id="dislikeBtn">踩雷</button>
+          <button class="btn tiny" id="blockBtn">别再推</button>
+          <button class="btn tiny" id="patchBtn">改价</button>
+          <button class="btn tiny" id="couponBtn" hidden>外卖券</button>
         </div>
         <p class="hint" id="poolInfo" style="text-align:center"></p>
       </div>
@@ -70,7 +75,7 @@
       </div>
 
       <div class="card">
-        <h2>📍 本地化 <span class="sub" id="locSub"></span></h2>
+        <h2>本地化 <span class="sub" id="locSub"></span></h2>
         <div id="locBody"></div>
       </div>
     </section>
@@ -109,12 +114,17 @@
       </div>
 
       <div class="card">
+        <h2>校园菜单包 <span class="sub">别人的学校怎么吃</span></h2>
+        <div id="packCard"></div>
+      </div>
+
+      <div class="card">
         <h2>我的菜单 <span class="sub" id="customCount"></span></h2>
         <p class="hint">把你学校食堂的窗口菜、常点的本地外卖加进来，抽签就完全贴合你身边的价格。数据只存在你自己的手机上。</p>
         <div class="list" id="customList" style="margin-top:10px"></div>
         <div class="actions-2" style="margin-top:12px">
-          <button class="btn tiny" id="addBtn">＋ 添加一个</button>
-          <button class="btn tiny" id="bulkBtn">📋 批量粘贴</button>
+          <button class="btn tiny" id="addBtn">添加一个</button>
+          <button class="btn tiny" id="bulkBtn">批量粘贴</button>
         </div>
       </div>
 
@@ -131,21 +141,21 @@
       <div class="card">
         <h2>数据</h2>
         <div class="actions-2">
-          <button class="btn tiny" id="exportBtn">⬇️ 导出备份</button>
-          <button class="btn tiny" id="importBtn">⬆️ 导入/粘贴导入</button>
-          <button class="btn tiny" id="copyMenuBtn">🔗 复制我的菜单</button>
+          <button class="btn tiny" id="exportBtn">导出备份</button>
+          <button class="btn tiny" id="importBtn">导入 / 粘贴导入</button>
+          <button class="btn tiny" id="copyMenuBtn">复制我的菜单</button>
         </div>
-        <p class="hint">导出的 JSON 包含你的自建菜品、改过的价格、黑名单和偏好，可以发给同学直接用。</p>
+        <p class="hint">导出的 JSON 包含你的自建菜品、改过的价格、黑名单和偏好，可以发给同学直接用；也可以当成投稿包发给我们，收录进「校园菜单包」给全校用。</p>
       </div>
 
       <div class="card">
         <h2>说明</h2>
         <div class="about">
-          <p>内置菜品的价格、等待时间都是<b>全国高校的参考值</b>，各地差异很大，请以你学校食堂和外卖 App 的实际标价为准。看到不对的，点结果卡上的「✏️ 改价」，改完只影响你自己的手机。</p>
-          <p>「好吃度」是综合口碑的参考分，不是官方评分；你可以用 👍👎 调教它，抽签概率会跟着变。</p>
+          <p>内置菜品的价格、等待时间都是<b>全国高校的参考值</b>，各地差异很大，请以你学校食堂和外卖 App 的实际标价为准。看到不对的，点结果卡上的「改价」，改完只影响你自己的手机。</p>
+          <p>「好吃度」是综合口碑的参考分，不是官方评分；你可以用「好吃」「踩雷」两个按钮调教它，抽签概率会跟着变。</p>
           <p>抽签算法：先按条件硬筛，再按 <code>口碑 × 价格 × 等待时间 × 新鲜度</code> 加权随机。最近吃过的会明显降权，标记「别再推」的永远不会再出现。</p>
           <p>所有数据都保存在浏览器本地（localStorage），不上传任何服务器。换手机请先「导出备份」。</p>
-          <p>参考了 GitHub 上同类项目的做法：加权抽签、重复抑制、黑名单、按重计价的场景化筛选。</p>
+          <p>参考了 GitHub 上同类项目的做法：加权抽签、重复抑制、黑名单、按预算筛选。校园菜单包的数据来源与许可写在每个包的说明里。</p>
         </div>
       </div>
     </section>
@@ -153,9 +163,28 @@
 </div>
 
 <nav class="tabbar" role="tablist">
-  <button class="on" data-tab="pick" role="tab" aria-selected="true"><span class="ico">🎲</span>抽一顿</button>
-  <button data-tab="log" role="tab" aria-selected="false"><span class="ico">📖</span>记录</button>
-  <button data-tab="me" role="tab" aria-selected="false"><span class="ico">🙋</span>我的</button>
+  <button class="on" data-tab="pick" role="tab" aria-selected="true">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="4" y="4" width="16" height="16" rx="4"></rect>
+      <circle cx="9" cy="9" r="1.15" fill="currentColor" stroke="none"></circle>
+      <circle cx="15" cy="15" r="1.15" fill="currentColor" stroke="none"></circle>
+      <circle cx="15" cy="9" r="1.15" fill="currentColor" stroke="none"></circle>
+    </svg>
+    抽一顿
+  </button>
+  <button data-tab="log" role="tab" aria-selected="false">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M4 6.5h16M4 12h16M4 17.5h10"></path>
+    </svg>
+    记录
+  </button>
+  <button data-tab="me" role="tab" aria-selected="false">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="8.5" r="3.6"></circle>
+      <path d="M4.8 20c.9-3.7 3.8-5.8 7.2-5.8s6.3 2.1 7.2 5.8"></path>
+    </svg>
+    我的
+  </button>
 </nav>
 
 <div id="toast" role="status" aria-live="polite"></div>
