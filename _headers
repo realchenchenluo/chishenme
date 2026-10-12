@@ -11,9 +11,14 @@
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
 
-# 静态资源可以缓存久一点；入口文件不缓存，避免发新版后拿到旧的 HTML
+# 静态资源缓存 10 分钟：既减轻回源，也不至于让改版后大家一天都拿不到新版 JS。
+# （之前设成 1 天，实测会让回访者拿到「新 HTML + 旧 JS」，这里改短并强制校验。）
 /assets/*
-  Cache-Control: public, max-age=86400
+  Cache-Control: public, max-age=600, must-revalidate
 
 /packs/*
-  Cache-Control: public, max-age=3600
+  Cache-Control: public, max-age=600, must-revalidate
+
+# 入口文件不缓存，保证拿到最新的版本
+/index.html
+  Cache-Control: no-cache, must-revalidate
