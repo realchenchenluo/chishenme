@@ -1134,7 +1134,7 @@
     try {
       const pos = await GEO.getPosition();
       S.loc = Object.assign({}, S.loc, { lat: pos.lat, lon: pos.lon, acc: pos.acc, ts: Date.now() });
-      const info = await GEO.reverseGeocode(pos.lat, pos.lon, (S.amapKey || '').trim());
+      const info = await GEO.reverseGeocode(pos.lat, pos.lon, amapKeyOf());
       if (info) {
         S.loc = Object.assign(S.loc, info);
         save();
@@ -1193,17 +1193,30 @@
   }
 
   function openNearby() {
-    const key = (S.amapKey || '').trim();
+    const key = amapKeyOf();
     if (!key) {
-      openSheet('先配一个高德 Key',
-        '<p class="hint" style="margin-top:0">搜周边真实餐厅要走高德的地图服务，需要一个免费 Key，配一次就行。没有 Key 也能用，只是搜不到真实店铺。</p>' +
-        '<div class="actions-2"><button class="btn primary" id="goSet">去填 Key</button>' +
-        '<button class="btn" id="howKey">怎么申请</button></div>',
+      // 没有 Key 时不要把人卡在这里：先说清"不配也能用"，并给出真正省事的那条路
+      openSheet('找周边吃的',
+        '<p class="hint" style="margin-top:0">这个功能需要高德地图的 Key。高德个人开发者要实名认证，' +
+        '确实是本站里最麻烦的一步——<b>所以它是可选的，不配也不影响其他功能</b>。</p>' +
+        '<p class="hint"><b>更省事的两个办法：</b></p>' +
+        '<ul style="padding-left:18px;margin:0 0 10px;font-size:13.5px;line-height:1.9">' +
+        '<li><b>批量粘贴</b>：把常点的几家店名一行一个粘进去就行，不用注册任何账号（推荐）</li>' +
+        '<li><b>菜单包</b>：同学整理好的整份菜单，一键导入</li>' +
+        '</ul>' +
+        '<div class="actions-2"><button class="btn primary" id="goBulk">批量粘贴一批店铺</button>' +
+        '<button class="btn" id="howKey">还是想配 Key</button></div>' +
+        '<p class="hint" style="margin-top:10px">说明：我实测过免密钥的 OpenStreetMap 方案，' +
+        '国内 6 个地点只有 2 次能返回，且返回的店里一条数据都没有，所以没有采用——' +
+        '短期内"不注册就能搜周边"这条路走不通。</p>',
         (wrap, close) => {
           $('#howKey', wrap).onclick = () => { close(); openAmapHelp(); };
-          $('#goSet', wrap).onclick = () => {
+          $('#goBulk', wrap).onclick = () => {
             close(); switchTab('me');
-            setTimeout(() => { const el = $('#locSettings'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80);
+            setTimeout(() => {
+              const el = $('#bulkBtn');
+              if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.click(); }
+            }, 120);
           };
         });
       return;
@@ -1268,7 +1281,10 @@
             const place = $('#nbPlace', wrap).value;
             let added = 0;
             results.filter((p) => picked.has(p.id)).forEach((p) => {
-              const dish = GEO.poiToDish(p, place);
+              // 高德返回的店名/分类也是第三方数据，同样过一遍净化
+              const s = sanitizeDish(GEO.poiToDish(p, place));
+              if (!s) return;
+              const dish = Object.assign({ id: 'p:' + stripMarkup(p.id || s.n, 60), builtin: false, from: 'gaode' }, s);
               const exist = S.custom.find((x) => x.n === dish.n);
               if (exist) Object.assign(exist, dish); else S.custom.push(dish);
               added++;
@@ -1289,7 +1305,7 @@
     if (sub) sub.textContent = L && L.city ? L.city : '';
     if (!L) {
       box.innerHTML =
-        '<p class="hint" style="margin-top:0">定位后可以：按你所在城市估算外卖价和配送时长；配一个免费的高德 Key，还能搜出你周边的真实餐厅一键加进菜单。</p>' +
+        '<p class="hint" style="margin-top:0">定位后可以按你所在城市估算外卖价和配送时长。想搜周边的真实餐厅需要另外配一个高德 Key（可选，不配也不影响其他功能）。</p>' +
         '<div class="actions-2" style="margin-top:0"><button class="btn primary" id="locBtn">用当前位置</button>' +
         '<button class="btn" id="cityBtn">手动选城市</button>' +
         '<button class="btn" id="nearbyBtn">找周边吃的</button></div>';
@@ -1315,7 +1331,8 @@
     const box = $('#locSettings');
     if (!box) return;
     const L = S.loc;
-    const key = (S.amapKey || '').trim();
+    const key = (S.amapKey || '').trim();        // 设备上自己填的
+    const siteKey = (SCHOOL.amapKey || '').trim(); // 站点配置里的（全校共用）
     box.innerHTML =
       '<div class="item" style="border:0;padding:0 0 8px"><div class="grow">' +
       '<div class="name">' + esc(locLabel()) + '</div>' +
@@ -1327,14 +1344,20 @@
       '<button class="btn tiny" id="setCityBtn">手动选城市</button>' +
       (L ? '<button class="btn tiny danger" id="clearLocBtn">清除定位</button>' : '') +
       '</div>' +
-      '<h2 style="margin:14px 0 8px;font-size:13px">高德「Web服务」Key <span class="sub">可选，用来搜周边真实餐厅</span></h2>' +
+      '<h2 style="margin:14px 0 8px;font-size:13px">找周边吃的 <span class="sub">可选功能，不配也能用本站其他部分</span></h2>' +
+      (siteKey
+        ? '<p class="hint" style="margin-top:0">本站已经配好 Key（' + esc(siteKey.slice(0, 4)) + '…），' +
+          '开箱就能搜周边。下面只是你自己想换成别的 Key 时才需要填。</p>'
+        : '<p class="hint" style="margin-top:0">这个功能要用高德地图的 Key。高德个人开发者需要实名认证，' +
+          '是本站最麻烦的一步——<b>所以它是可选的</b>：本校菜单、批量粘贴加店铺、菜单包都不需要任何密钥。' +
+          '真要配的话，配一次就行；填在 <code>school.json</code> 里可以全站共用，同学们就不用各自申请了。</p>') +
       '<label class="field" style="margin-bottom:8px"><input type="text" id="amapInput" placeholder="粘贴你的 Key（32 位字符）" value="' + esc(key) + '"></label>' +
       '<div class="actions-2" style="margin-top:0">' +
       '<button class="btn tiny primary" id="amapSaveBtn">保存并验证</button>' +
       '<button class="btn tiny" id="amapHelpBtn">怎么免费申请</button>' +
       (key ? '<button class="btn tiny ghost" id="amapClearBtn">删除 Key</button>' : '') +
       '</div>' +
-      '<p class="hint">Key 只存在这台设备的浏览器里。搜索只在你点按钮时发生。</p>' +
+      '<p class="hint">自己填的 Key 只存在这台设备的浏览器里，搜索只在你点按钮时发生。</p>' +
       '<div class="switchrow" style="margin-top:10px"><div>' +
       '<div class="sr-label">按城市等级微调外卖价和配送时长</div>' +
       '<div class="sr-desc">只有一线和新一线会上调（基础数据本来就是按二三线估的），其他城市用原值</div></div>' +
@@ -1458,7 +1481,7 @@
    * 留空时页面会明确标注内置数据是「通用参考」，不会让人误当成食堂真实菜价。
    */
   const SCHOOL_URL = './school.json';
-  let SCHOOL = { name: '', canteenPack: '', canteens: [] };
+  let SCHOOL = { name: '', canteenPack: '', canteens: [], amapKey: '' };
 
   async function loadSchool() {
     try {
@@ -1469,10 +1492,17 @@
       SCHOOL = {
         name: stripMarkup(d.name, 40),
         canteenPack: String(d.canteenPack || '').trim(),
-        canteens: Array.isArray(d.canteens) ? d.canteens.map((c) => stripMarkup(c, 20)).filter(Boolean) : []
+        canteens: Array.isArray(d.canteens) ? d.canteens.map((c) => stripMarkup(c, 20)).filter(Boolean) : [],
+        // 站点级的高德 Key：一个人配好，全站同学都不用再申请
+        amapKey: stripMarkup(d.amapKey, 64)
       };
       return SCHOOL;
     } catch (e) { return null; }
+  }
+
+  // 生效的高德 Key：设备上自己填的优先，其次用站点配置里的
+  function amapKeyOf() {
+    return (S.amapKey || '').trim() || (SCHOOL.amapKey || '').trim();
   }
 
   function schoolDishCount() {
@@ -1791,7 +1821,8 @@
   // 学校信息是异步取的，拿到之后再刷新受影响的几块
   (async () => {
     await loadSchool();
-    if (SCHOOL.name) { renderGreet(); renderPackCard(); }
+    // 设置卡片在 loadSchool 之前就渲染过一次了，这里必须重绘，否则站点级 Key 不会显示
+    renderLoc(); renderLocSettings(); renderGreet(); renderPackCard();
     const r = await autoLoadSchoolMenu();
     if (r) {
       // 本校菜单进来了就默认只抽本校的，免得参考价混进来
