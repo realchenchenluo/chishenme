@@ -55,7 +55,7 @@
 
   /* ================= 状态 ================= */
   const DEFAULTS = {
-    filters: { place: 'any', budget: 20, wait: 30, cats: [], spicy: 'any', mode: 'balance', skipRecent: true, onlyMine: false },
+    filters: { place: 'any', budget: 20, wait: 30, cats: [], wins: [], spicy: 'any', mode: 'balance', skipRecent: true, onlyMine: false },
     diet: {},
     blacklist: [],   // [{id, name}]
     history: [],     // [{id, name, price, place, meal, ts}]
@@ -209,6 +209,7 @@
       if (skipSession && sessionSeen.has(d.id)) continue;
       if (dietBlocked(d)) continue;
       if (F.cats.length && !F.cats.some((c) => d.t.includes(c))) continue;
+      if (F.wins && F.wins.length && !F.wins.includes(d.w)) continue;   // 只看某食堂/窗口
       if (F.spicy === 'yes' && !d.t.includes('辣') && !d.t.includes('微辣')) continue;
       if (F.spicy === 'no' && (d.t.includes('辣') || d.t.includes('微辣'))) continue;
       const offs = offers(d).filter(offerFits);
@@ -283,12 +284,18 @@
   const slot = $('#slot');
   const resultBox = $('#result');
 
-  function setSlot(name, sub) {
+  function setSlot(name, sub, where) {
     slot.innerHTML = '';
     const n = document.createElement('div');
     n.className = 'slot-name';
     n.textContent = name;
     slot.appendChild(n);
+    if (where) {
+      const w = document.createElement('div');
+      w.className = 'slot-where';
+      w.textContent = where;
+      slot.appendChild(w);
+    }
     if (sub) {
       const s = document.createElement('div');
       s.className = 'slot-price';
@@ -345,7 +352,7 @@
     const total = 1150;
     const step = () => {
       const r = pool[Math.floor(Math.random() * pool.length)];
-      setSlot(r.d.n, priceText(r.offer.price) + ' · ' + waitText(r.offer));
+      setSlot(r.d.n, priceText(r.offer.price) + ' · ' + waitText(r.offer), r.d.w || '');
       elapsed += delay;
       delay *= 1.13;
       if (elapsed < total) { setTimeout(step, delay); }
@@ -360,7 +367,7 @@
     current = win;
     const d = win.d, o = win.offer;
 
-    setSlot(d.n, priceText(o.price) + ' · ' + waitText(o));
+    setSlot(d.n, priceText(o.price) + ' · ' + waitText(o), d.w || '');
     slot.querySelector('.slot-name').classList.add('reveal');
 
     const stars = '★'.repeat(Math.round(d.r)) + '☆'.repeat(5 - Math.round(d.r));
@@ -471,7 +478,7 @@
     if (!current) return;
     const d = current.d, o = current.offer;
     S.history.unshift({
-      id: d.id, name: d.n, price: Math.round(mid(o.price)),
+      id: d.id, name: d.n, w: d.w || '', price: Math.round(mid(o.price)),
       place: o.place, meal: mealNow().key, ts: Date.now()
     });
     S.history = S.history.slice(0, 300);
@@ -502,7 +509,7 @@
   async function shareResult() {
     if (!current) return;
     const d = current.d, o = current.offer;
-    const text = '今天吃【' + d.n + '】' + placeLabel(o.place) + '，' +
+    const text = '今天吃【' + d.n + '】' + (d.w ? d.w + '，' : '') + placeLabel(o.place) + '，' +
       priceText(o.price) + '，' + waitText(o) + '\n别再纠结了，你也来抽一个 → ' + location.href;
     try {
       if (navigator.share) { await navigator.share({ text: text }); return; }
@@ -549,6 +556,34 @@
       row.appendChild(chips);
       box.appendChild(row);
     });
+
+    // 食堂/窗口：选项从现有数据里自动生成，本校菜单导进来之后这一行才有东西
+    const wins = Array.from(new Set(allDishes().map((d) => d.w).filter(Boolean))).sort();
+    if (wins.length) {
+      const row = document.createElement('div');
+      row.className = 'frow';
+      const lab = document.createElement('div');
+      lab.className = 'flabel';
+      lab.innerHTML = '<span>只去哪吃（可多选）</span>';
+      row.appendChild(lab);
+      const chips = document.createElement('div');
+      chips.className = 'chips wrap';
+      wins.forEach((w) => {
+        const b = document.createElement('button');
+        b.className = 'pill' + (S.filters.wins.includes(w) ? ' on' : '');
+        b.type = 'button';
+        b.textContent = w;
+        b.onclick = () => {
+          const arr = S.filters.wins;
+          const i = arr.indexOf(w);
+          if (i >= 0) arr.splice(i, 1); else arr.push(w);
+          save(); renderFilters(); renderPick();
+        };
+        chips.appendChild(b);
+      });
+      row.appendChild(chips);
+      box.appendChild(row);
+    }
 
     // 开关
     const sw = document.createElement('div');
@@ -688,7 +723,7 @@
     if (!today.length) {
       topBox.appendChild(itemEl('今天还没记录', '抽中了点「就吃这个」就会记在这里', ''));
     } else {
-      today.forEach((h) => topBox.appendChild(itemEl(h.name, (h.place === 'takeout' ? '外卖' : '食堂') + ' · ¥' + h.price, fmtTime(h.ts))));
+      today.forEach((h) => topBox.appendChild(itemEl(h.name, (h.w ? h.w + ' · ' : '') + (h.place === 'takeout' ? '外卖' : '食堂') + ' · ¥' + h.price, fmtTime(h.ts))));
     }
     if (top.length) {
       topBox.appendChild(itemEl('最常吃', top.map((x) => x[0] + ' ×' + x[1]).join('　'), ''));
@@ -702,7 +737,7 @@
       return;
     }
     S.history.slice(0, 60).forEach((h, i) => {
-      const el = itemEl(h.name, (h.place === 'takeout' ? '外卖' : '食堂') + ' · ¥' + h.price +
+      const el = itemEl(h.name, (h.w ? h.w + ' · ' : '') + (h.place === 'takeout' ? '外卖' : '食堂') + ' · ¥' + h.price +
         (h.meal ? ' · ' + ((MEALS.find((m) => m.key === h.meal) || {}).label || '') : ''), fmtTime(h.ts));
       const del = document.createElement('button');
       del.className = 'btn tiny ghost';
@@ -720,6 +755,9 @@
   }
 
   /* ================= 我的菜单 ================= */
+  let meQuery = '';      // 「我的菜单」的搜索词
+  let meShowAll = false; // 是否展开全部（整校菜单上百条，默认只显示前 30 条）
+
   function renderMe() {
     $('#customCount').textContent = S.custom.length ? S.custom.length + ' 个自建菜品' : '还没添加';
     const box = $('#customList');
@@ -727,8 +765,50 @@
     if (!S.custom.length) {
       box.appendChild(itemEl('还没有自建菜品', '添加以后，抽签会优先照顾你身边的真实价格', ''));
     }
-    S.custom.forEach((c) => {
-      const parts = [c.p === 'both' ? '食堂+外卖' : placeLabel(c.p), priceText(c.price || [0, 0])];
+
+    // 按食堂/窗口聚类 + 搜索 + 折叠：整校菜单导进来动辄上百条，不分块没法看
+    const kw = meQuery.trim().toLowerCase();
+    const all = S.custom.filter((c) => !kw ||
+      (c.n + ' ' + (c.w || '') + ' ' + (c.t || []).join(' ')).toLowerCase().includes(kw));
+    const sorted = all.slice().sort((a, b) => {
+      const wa = a.w || '\uffff', wb = b.w || '\uffff';
+      if (wa !== wb) return wa < wb ? -1 : 1;
+      return a.n.localeCompare(b.n, 'zh');
+    });
+    const LIMIT = 30;
+    const shown = meShowAll ? sorted : sorted.slice(0, LIMIT);
+
+    if (S.custom.length > 8) {
+      const bar = document.createElement('div');
+      bar.className = 'actions-2';
+      bar.style.marginTop = '0';
+      bar.innerHTML = '<input type="text" id="meSearch" placeholder="搜菜名 / 食堂窗口 / 标签" value="' + esc(meQuery) + '">';
+      box.appendChild(bar);
+      const inp = $('#meSearch', bar);
+      inp.oninput = () => { meQuery = inp.value; const p = inp.selectionStart; renderMe(); const n = $('#meSearch'); if (n) { n.focus(); n.setSelectionRange(p, p); } };
+      if (kw || all.length !== S.custom.length) {
+        const tip = document.createElement('p');
+        tip.className = 'hint';
+        tip.style.margin = '6px 0 0';
+        tip.textContent = '匹配到 ' + all.length + ' 条 / 共 ' + S.custom.length + ' 条';
+        box.appendChild(tip);
+      }
+    }
+
+    let lastW = null;
+    shown.forEach((c) => {
+      const w = c.w || '';
+      if (w !== lastW) {
+        lastW = w;
+        const head = document.createElement('div');
+        head.className = 'flabel';
+        head.style.margin = '10px 0 2px';
+        head.textContent = w || '未填食堂/窗口';
+        box.appendChild(head);
+      }
+      const parts = [];
+      if (c.w) parts.push(c.w);
+      parts.push(c.p === 'both' ? '食堂+外卖' : placeLabel(c.p), priceText(c.price || [0, 0]));
       if (c.wait) parts.push('等 ' + (c.wait[0] === c.wait[1] ? c.wait[0] : c.wait[0] + '–' + c.wait[1]) + ' 分钟');
       if (c.t && c.t.length) parts.push(c.t.join('/'));
       const el = itemEl(c.n, parts.join(' · '), '★' + (c.r || 4).toFixed(1), 'stars');
@@ -747,11 +827,23 @@
       del.onclick = () => {
         S.custom = S.custom.filter((x) => x.id !== c.id);
         S.blacklist = S.blacklist.filter((x) => x.id !== c.id);
-        save(); renderMe(); renderPick(); toast('已删除');
+        save(); renderMe(); renderFilters(); renderPick(); toast('已删除');
       };
       el.appendChild(edit); el.appendChild(del);
       box.appendChild(el);
     });
+
+    // 折叠：默认只显示前 30 条，剩下的按需展开
+    if (sorted.length > LIMIT) {
+      const more = document.createElement('button');
+      more.className = 'btn tiny';
+      more.style.marginTop = '10px';
+      more.textContent = meShowAll
+        ? '收起，只看前 ' + LIMIT + ' 条'
+        : '展开全部（还有 ' + (sorted.length - LIMIT) + ' 条）';
+      more.onclick = () => { meShowAll = !meShowAll; renderMe(); };
+      box.appendChild(more);
+    }
 
     $('#blockCount').textContent = S.blacklist.length ? S.blacklist.length + ' 个' : '';
     const bl = $('#blockList');
@@ -802,6 +894,8 @@
         '</div>' : '') +
       '<label class="field"><span class="fl">好吃度 <b id="e_rv">' + (d.r || 4.2).toFixed(1) + '</b> 分（影响被抽中的概率）</span>' +
       '<input type="range" id="e_r" min="3" max="5" step="0.1" value="' + (d.r || 4.2) + '" style="width:100%;min-height:auto"></label>' +
+      '<label class="field"><span class="fl">食堂 / 窗口（可选，抽中时会显示在菜名下面）</span>' +
+      '<input type="text" id="e_w" value="' + esc(d.w || '') + '" placeholder="例：一食堂二楼 · 川湘窗口"></label>' +
       '<label class="field"><span class="fl">标签（逗号分隔，参与筛选和忌口）</span><input type="text" id="e_t" value="' + esc((d.t || []).join(',')) + '" placeholder="米饭,辣,鸡肉"></label>' +
       '<label class="field"><span class="fl">一句话点评（可空）</span><textarea id="e_d" placeholder="例：三楼窗口的红烧肉，15 块管饱">' + esc(d.d || '') + '</textarea></label>' +
       '<div class="actions-2">' +
@@ -836,6 +930,7 @@
       const vals = {
         n: name, p: p, price: price, wait: wait,
         r: parseFloat($('#e_r', wrap).value) || 4.2,
+        w: $('#e_w', wrap).value.trim(),
         t: $('#e_t', wrap).value.split(/[,，、\s]+/).map((s) => s.trim()).filter(Boolean),
         d: $('#e_d', wrap).value.trim()
       };
@@ -858,7 +953,7 @@
         if (target) Object.assign(target, clean);
         else S.custom.push(Object.assign({ id: 'c:' + clean.n + ':' + Date.now(), builtin: false }, clean));
       }
-      save(); close(); renderMe(); renderPick();
+      save(); close(); renderMe(); renderFilters(); renderPick();
       toast('已保存，抽签会用你的新数据');
     };
   }
@@ -911,6 +1006,7 @@
       d: stripMarkup(raw.d, 160)
     };
     if (!out.t.length) out.t = ['套餐'];
+    if (raw.w) out.w = stripMarkup(raw.w, 24);   // 食堂 / 楼层 / 窗口，用来告诉人"去哪吃"
     if (raw.tp) out.tp = numPair(raw.tp, 0, 999, out.price);
     if (raw.tw) out.tw = numPair(raw.tw, 0, 600, [30, 45]);
     return out;
@@ -938,6 +1034,8 @@
       '<h2 style="margin:0 0 8px;font-size:16px">批量粘贴</h2>' +
       '<p class="hint">一行一个菜。格式：<code>菜名, 价格, 等待分钟, 好吃度, 标签</code>，后面几项可以省略。<br>例：<code>三楼红烧肉, 15, 10, 4.6, 米饭/猪肉</code></p>' +
       '<textarea id="b_txt" style="margin-top:10px" placeholder="三楼红烧肉, 15, 10, 4.6, 米饭/猪肉&#10;楼下沙县拌面 10 8&#10;鸡蛋灌饼"></textarea>' +
+      '<label class="field" style="margin-top:10px"><span class="fl">这些菜在哪个食堂 / 窗口（可选）</span>' +
+      '<input type="text" id="b_w" placeholder="例：一食堂二楼"></label>' +
       '<label class="field" style="margin-top:10px"><span class="fl">这些菜在哪儿</span><select id="b_p">' +
       '<option value="canteen">食堂 / 校内</option><option value="takeout">外卖</option><option value="both">两边都有</option></select></label>' +
       '<div class="actions-2"><button class="btn" id="b_cancel">取消</button><button class="btn primary" id="b_save">全部导入</button></div>' +
@@ -947,19 +1045,20 @@
     $('#b_cancel', wrap).onclick = close;
     $('#b_save', wrap).onclick = () => {
       const p = $('#b_p', wrap).value;
+      const bw = $('#b_w', wrap).value.trim();   // 这批菜共用的食堂/窗口
       const lines = $('#b_txt', wrap).value.split('\n').map((s) => s.trim()).filter(Boolean);
       let added = 0;
       lines.forEach((line) => {
         const parsed = parseLine(line);
         if (!parsed) return;
-        const s = sanitizeDish(Object.assign({ p: p, wait: [8, 15], tp: [16, 24], tw: [30, 45], d: '' }, parsed));
+        const s = sanitizeDish(Object.assign({ p: p, w: bw, wait: [8, 15], tp: [16, 24], tw: [30, 45], d: '' }, parsed));
         if (!s) return;
         const exist = S.custom.find((x) => x.n === s.n);
         const dish = Object.assign({ id: 'c:' + s.n, builtin: false }, s);
         if (exist) Object.assign(exist, dish); else S.custom.push(dish);
         added++;
       });
-      save(); close(); renderMe(); renderPick();
+      save(); close(); renderMe(); renderFilters(); renderPick();
       toast(added ? '导入了 ' + added + ' 个菜' : '没认出任何菜名，检查一下格式');
     };
   }
@@ -1299,7 +1398,7 @@
               if (exist) Object.assign(exist, dish); else S.custom.push(dish);
               added++;
             });
-            save(); close(); renderMe(); renderLoc(); renderPick();
+            save(); close(); renderMe(); renderFilters(); renderLoc(); renderPick();
             toast('导入了 ' + added + ' 家店，抽签已经能用它们了');
           };
         };
@@ -1637,7 +1736,7 @@
             btn.textContent = '导入中…';
             try {
               const r = await importPack(p);
-              renderMe(); renderPick();
+              renderMe(); renderFilters(); renderPick();
               toast('已导入 ' + r.added + ' 道菜' + (r.updated ? '（更新 ' + r.updated + ' 道）' : '') + '，抽签已经能用');
               btn.textContent = '重新导入';
               btn.disabled = false;

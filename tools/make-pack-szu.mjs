@@ -86,7 +86,8 @@ function waitOf(category, name) {
 }
 
 const dishes = rows.map((r) => {
-  const parts = [`${r.category}窗口`, r.remark];
+  const where = r.category.includes('窗口') ? r.category : r.category + '窗口';
+  const parts = [r.remark];
   if (r.calories) parts.push(`约 ${r.calories} 千卡`);
   return {
     // 源数据的行号：同一道菜在不同窗口各有一份（比如炒米粉在早餐和晚餐窗口价格不同），
@@ -94,6 +95,7 @@ const dishes = rows.map((r) => {
     k: r.id,
     n: r.dish_name,
     p: 'canteen',
+    w: where,                       // 窗口名：抽中时会显示"去哪吃"
     price: [r.price, r.price],
     wait: waitOf(r.category, r.dish_name),
     r: 4.2,

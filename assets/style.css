@@ -122,6 +122,12 @@ body {
 .slot.rolling .slot-name { filter: blur(.6px); opacity: .72; }
 .slot .slot-idle { font-size: 26px; font-weight: 800; color: var(--ink); }
 .slot .slot-hint { margin-top: 8px; font-size: 13px; color: var(--muted); }
+/* 「去哪吃」要显眼：本校用起来最需要的其实是在哪个食堂哪个窗口 */
+.slot .slot-where {
+  margin-top: 7px; padding: 3px 12px; border-radius: 999px;
+  font-size: 13.5px; font-weight: 600;
+  background: var(--brand-soft); color: var(--brand);
+}
 .slot .slot-price { margin-top: 6px; font-size: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 
 /* 抽中后的揭示动画 */
