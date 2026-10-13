@@ -55,7 +55,7 @@
 
   /* ================= 状态 ================= */
   const DEFAULTS = {
-    filters: { place: 'any', budget: 25, wait: 45, cats: [], wins: [], spicy: 'any', mode: 'balance', skipRecent: true, onlyMine: false },
+    filters: { place: 'any', budget: 25, wait: 45, cats: [], floors: [], wins: [], spicy: 'any', mode: 'balance', skipRecent: true, onlyMine: false },
     diet: {},
     blacklist: [],   // [{id, name}]
     history: [],     // [{id, name, price, place, meal, ts}]
@@ -162,6 +162,12 @@
   }
 
   function placeLabel(p) { return p === 'takeout' ? '外卖' : '食堂'; }
+  // 「去哪吃」= 楼层 + 窗口（楼层是做筛选和定位用的，别混在窗口名里）
+  function whereText(d) { return [d && d.f, d && d.w].filter(Boolean).join(' · '); }
+  function floorOrder() {
+    return (SCHOOL.floors && SCHOOL.floors.length) ? SCHOOL.floors : ['一楼', '二楼', '三楼', '四楼', '五楼'];
+  }
+  function floorRank(f) { const i = floorOrder().indexOf(f); return i < 0 ? 99 : i; }
   function priceText(p) { return p[0] === p[1] ? '¥' + p[0] : '¥' + p[0] + '–' + p[1]; }
   function waitText(o) {
     const w = o.wait;
@@ -210,7 +216,8 @@
       if (skipSession && sessionSeen.has(d.id)) continue;
       if (dietBlocked(d)) continue;
       if (F.cats.length && !F.cats.some((c) => d.t.includes(c))) continue;
-      if (F.wins && F.wins.length && !F.wins.includes(d.w)) continue;   // 只看某食堂/窗口
+      if (F.floors && F.floors.length && !F.floors.includes(d.f)) continue;   // 只看某几层楼
+      if (F.wins && F.wins.length && !F.wins.includes(d.w)) continue;   // 只看某些窗口
       if (F.spicy === 'yes' && !d.t.includes('辣') && !d.t.includes('微辣')) continue;
       if (F.spicy === 'no' && (d.t.includes('辣') || d.t.includes('微辣'))) continue;
       const offs = offers(d).filter(offerFits);
@@ -359,7 +366,7 @@
     const total = 1150;
     const step = () => {
       const r = pool[Math.floor(Math.random() * pool.length)];
-      setSlot(r.d.n, priceText(r.offer.price) + ' · ' + waitText(r.offer), r.d.w || '');
+      setSlot(r.d.n, priceText(r.offer.price) + ' · ' + waitText(r.offer), whereText(r.d));
       elapsed += delay;
       delay *= 1.13;
       if (elapsed < total) { setTimeout(step, delay); }
@@ -374,7 +381,7 @@
     current = win;
     const d = win.d, o = win.offer;
 
-    setSlot(d.n, priceText(o.price) + ' · ' + waitText(o), d.w || '');
+    setSlot(d.n, priceText(o.price) + ' · ' + waitText(o), whereText(d));
     slot.querySelector('.slot-name').classList.add('reveal');
 
     const stars = '★'.repeat(Math.round(d.r)) + '☆'.repeat(5 - Math.round(d.r));
@@ -423,7 +430,7 @@
   function showEmptyPool() {
     const fix = diagnose();
     // 本校菜单配了却没载进来（比如断网），这时条件放宽也没用，要如实说清
-    const schoolBroken = SCHOOL.canteenPack && !schoolDishCount();
+    const schoolBroken = (SCHOOL.canteenPacks || []).length && !schoolDishCount();
     if (schoolBroken) {
       resultBox.innerHTML =
         '<div class="empty">' +
@@ -490,6 +497,7 @@
     bits.push(F.budget ? '≤' + F.budget + '元' : '预算不限');
     bits.push(F.wait ? '≤' + F.wait + '分钟' : '时间不限');
     if (F.cats.length) bits.push(F.cats.join('/'));
+    if (F.floors && F.floors.length) bits.push(F.floors.join('/'));
     if (F.spicy === 'yes') bits.push('要辣');
     if (F.spicy === 'no') bits.push('不吃辣');
     return '· ' + bits.join(' · ');
@@ -531,7 +539,7 @@
   async function shareResult() {
     if (!current) return;
     const d = current.d, o = current.offer;
-    const text = '今天吃【' + d.n + '】' + (d.w ? d.w + '，' : '') + placeLabel(o.place) + '，' +
+    const text = '今天吃【' + d.n + '】' + (whereText(d) ? whereText(d) + '，' : '') + placeLabel(o.place) + '，' +
       priceText(o.price) + '，' + waitText(o) + '\n别再纠结了，你也来抽一个 → ' + location.href;
     try {
       if (navigator.share) { await navigator.share({ text: text }); return; }
@@ -579,26 +587,62 @@
       box.appendChild(row);
     });
 
-    // 食堂/窗口：选项从现有数据里自动生成，本校菜单导进来之后这一行才有东西
-    const wins = Array.from(new Set(allDishes().map((d) => d.w).filter(Boolean))).sort();
+    // 楼层：一层楼十几个窗口，五层楼就是几十个——必须分两级，否则一行窗口挤到没法用
+    const all = allDishes();
+    const floors = Array.from(new Set(all.map((d) => d.f).filter(Boolean)))
+      .sort((x, y) => floorRank(x) - floorRank(y));
+    const selFloors = S.filters.floors;
+    if (floors.length) {
+      const row = document.createElement('div');
+      row.className = 'frow';
+      const lab = document.createElement('div');
+      lab.className = 'flabel';
+      lab.innerHTML = '<span>只去哪层楼（可多选）</span>';
+      row.appendChild(lab);
+      const chips = document.createElement('div');
+      chips.className = 'chips wrap';
+      floors.forEach((f) => {
+        const b = document.createElement('button');
+        b.className = 'pill' + (selFloors.includes(f) ? ' on' : '');
+        b.type = 'button';
+        b.textContent = f;
+        b.onclick = () => {
+          const i = selFloors.indexOf(f);
+          if (i >= 0) selFloors.splice(i, 1); else selFloors.push(f);
+          S.filters.wins = [];   // 换楼层就把窗口选择清掉，那些窗口不一定还在
+          save(); renderFilters(); renderPick();
+        };
+        chips.appendChild(b);
+      });
+      row.appendChild(chips);
+      box.appendChild(row);
+    }
+
+    // 窗口：跟着楼层走。选了某一层就只列那层的窗口（不带前缀）；一层没选时列全部并带上楼层前缀
+    const scope = selFloors.length ? all.filter((d) => selFloors.includes(d.f)) : all;
+    const winMap = new Map();
+    scope.forEach((d) => { if (d.w) winMap.set(String(d.f || '') + '|' + d.w, { f: d.f, w: d.w }); });
+    const wins = Array.from(winMap.values())
+      .sort((x, y) => (floorRank(x.f) - floorRank(y.f)) || (x.w < y.w ? -1 : 1));
     if (wins.length) {
       const row = document.createElement('div');
       row.className = 'frow';
       const lab = document.createElement('div');
       lab.className = 'flabel';
-      lab.innerHTML = '<span>只去哪吃（可多选）</span>';
+      lab.innerHTML = '<span>只去哪吃（可多选）</span><span>' +
+        (selFloors.length ? '' : '窗口很多，先选楼层会清爽些') + '</span>';
       row.appendChild(lab);
       const chips = document.createElement('div');
       chips.className = 'chips wrap';
-      wins.forEach((w) => {
+      wins.forEach((it) => {
         const b = document.createElement('button');
-        b.className = 'pill' + (S.filters.wins.includes(w) ? ' on' : '');
+        b.className = 'pill' + (S.filters.wins.includes(it.w) ? ' on' : '');
         b.type = 'button';
-        b.textContent = w;
+        b.textContent = selFloors.length === 1 ? it.w : ((it.f ? it.f + ' ' : '') + it.w);
         b.onclick = () => {
           const arr = S.filters.wins;
-          const i = arr.indexOf(w);
-          if (i >= 0) arr.splice(i, 1); else arr.push(w);
+          const i = arr.indexOf(it.w);
+          if (i >= 0) arr.splice(i, 1); else arr.push(it.w);
           save(); renderFilters(); renderPick();
         };
         chips.appendChild(b);
@@ -793,6 +837,8 @@
     const all = S.custom.filter((c) => !kw ||
       (c.n + ' ' + (c.w || '') + ' ' + (c.t || []).join(' ')).toLowerCase().includes(kw));
     const sorted = all.slice().sort((a, b) => {
+      const fa = floorRank(a.f), fb = floorRank(b.f);
+      if (fa !== fb) return fa - fb;               // 先按楼层，再按窗口，最后按菜名
       const wa = a.w || '\uffff', wb = b.w || '\uffff';
       if (wa !== wb) return wa < wb ? -1 : 1;
       return a.n.localeCompare(b.n, 'zh');
@@ -819,17 +865,17 @@
 
     let lastW = null;
     shown.forEach((c) => {
-      const w = c.w || '';
+      const w = whereText(c) || '';
       if (w !== lastW) {
         lastW = w;
         const head = document.createElement('div');
         head.className = 'flabel';
         head.style.margin = '10px 0 2px';
-        head.textContent = w || '未填食堂/窗口';
+        head.textContent = w || '未填楼层/窗口';
         box.appendChild(head);
       }
       const parts = [];
-      if (c.w) parts.push(c.w);
+      if (w) parts.push(w);
       parts.push(c.p === 'both' ? '食堂+外卖' : placeLabel(c.p), priceText(c.price || [0, 0]));
       if (c.wait) parts.push('等 ' + (c.wait[0] === c.wait[1] ? c.wait[0] : c.wait[0] + '–' + c.wait[1]) + ' 分钟');
       if (c.t && c.t.length) parts.push(c.t.join('/'));
@@ -916,8 +962,12 @@
         '</div>' : '') +
       '<label class="field"><span class="fl">好吃度 <b id="e_rv">' + (d.r || 4.2).toFixed(1) + '</b> 分（影响被抽中的概率）</span>' +
       '<input type="range" id="e_r" min="3" max="5" step="0.1" value="' + (d.r || 4.2) + '" style="width:100%;min-height:auto"></label>' +
-      '<label class="field"><span class="fl">食堂 / 窗口（可选，抽中时会显示在菜名下面）</span>' +
-      '<input type="text" id="e_w" value="' + esc(d.w || '') + '" placeholder="例：一食堂二楼 · 川湘窗口"></label>' +
+      '<div class="two">' +
+      '<label class="field"><span class="fl">楼层（可选）</span>' +
+      '<input type="text" id="e_f" value="' + esc(d.f || '') + '" placeholder="例：一楼"></label>' +
+      '<label class="field"><span class="fl">窗口（可选）</span>' +
+      '<input type="text" id="e_w" value="' + esc(d.w || '') + '" placeholder="例：12号 广东风味"></label>' +
+      '</div>' +
       '<label class="field"><span class="fl">标签（逗号分隔，参与筛选和忌口）</span><input type="text" id="e_t" value="' + esc((d.t || []).join(',')) + '" placeholder="米饭,辣,鸡肉"></label>' +
       '<label class="field"><span class="fl">一句话点评（可空）</span><textarea id="e_d" placeholder="例：三楼窗口的红烧肉，15 块管饱">' + esc(d.d || '') + '</textarea></label>' +
       '<div class="actions-2">' +
@@ -952,6 +1002,7 @@
       const vals = {
         n: name, p: p, price: price, wait: wait,
         r: parseFloat($('#e_r', wrap).value) || 4.2,
+        f: $('#e_f', wrap).value.trim(),
         w: $('#e_w', wrap).value.trim(),
         t: $('#e_t', wrap).value.split(/[,，、\s]+/).map((s) => s.trim()).filter(Boolean),
         d: $('#e_d', wrap).value.trim()
@@ -1028,7 +1079,8 @@
       d: stripMarkup(raw.d, 160)
     };
     if (!out.t.length) out.t = ['套餐'];
-    if (raw.w) out.w = stripMarkup(raw.w, 24);   // 食堂 / 楼层 / 窗口，用来告诉人"去哪吃"
+    if (raw.w) out.w = stripMarkup(raw.w, 24);   // 窗口名
+    if (raw.f) out.f = stripMarkup(raw.f, 12);   // 楼层，和窗口一起构成"去哪吃"
     if (raw.tp) out.tp = numPair(raw.tp, 0, 999, out.price);
     if (raw.tw) out.tw = numPair(raw.tw, 0, 600, [30, 45]);
     return out;
@@ -1677,7 +1729,7 @@
    * 留空时页面会明确标注内置数据是「通用参考」，不会让人误当成食堂真实菜价。
    */
   const SCHOOL_URL = './school.json';
-  let SCHOOL = { name: '', canteenPack: '', canteens: [], amapKey: '' };
+  let SCHOOL = { name: '', canteenPacks: [], floors: [], canteens: [], amapKey: '' };
 
   async function loadSchool() {
     try {
@@ -1685,9 +1737,13 @@
       if (!res.ok) return null;
       const d = await res.json();
       if (!d || typeof d !== 'object') return null;
+      // 一层楼一个包：canteenPacks 是文件列表；也兼容只写一个 canteenPack 的旧格式
+      const packs = Array.isArray(d.canteenPacks) ? d.canteenPacks
+        : (d.canteenPack ? [d.canteenPack] : []);
       SCHOOL = {
         name: stripMarkup(d.name, 40),
-        canteenPack: String(d.canteenPack || '').trim(),
+        canteenPacks: packs.map((x) => stripMarkup(x, 60)).filter(Boolean),
+        floors: Array.isArray(d.floors) ? d.floors.map((x) => stripMarkup(x, 12)).filter(Boolean) : [],
         canteens: Array.isArray(d.canteens) ? d.canteens.map((c) => stripMarkup(c, 20)).filter(Boolean) : [],
         // 站点级的高德 Key：一个人配好，全站同学都不用再申请
         amapKey: stripMarkup(d.amapKey, 64)
@@ -1705,26 +1761,42 @@
     return S.custom.filter((c) => c.school).length;
   }
 
+  function loadedPacks() {
+    const v = S.schoolLoaded;
+    if (Array.isArray(v)) return v.slice();
+    return v ? [v] : [];   // 兼容早期只存一个文件名的格式
+  }
+
+  // 把 school.json 里列的每一层楼都载入（已载过的跳过）
   async function autoLoadSchoolMenu() {
-    if (!SCHOOL.canteenPack) return null;
-    if (S.schoolLoaded === SCHOOL.canteenPack) return null;   // 已经载过（换包名会重新载）
-    const pack = {
-      id: 'school',
-      name: SCHOOL.name || '本校',
-      file: './packs/' + SCHOOL.canteenPack,
-      place: 'canteen',
-      attribution: (SCHOOL.name || '本校') + '食堂菜单（本校数据）'
-    };
-    try {
-      const r = await importPack(pack);
-      S.custom.forEach((c) => { if (c.pack === 'school') c.school = true; });
-      S.schoolLoaded = SCHOOL.canteenPack;
-      save();
-      return r;
-    } catch (e) {
-      toast('本校菜单载入失败：' + (e.message || e));
-      return null;
+    const packs = SCHOOL.canteenPacks || [];
+    if (!packs.length) return null;
+    const loaded = loadedPacks();
+    let added = 0, updated = 0, floors = 0, failed = 0;
+    for (const file of packs) {
+      if (loaded.includes(file)) continue;
+      const base = file.replace(/\.json$/i, '');
+      const pack = {
+        id: 'school-' + base,                 // 每层楼一个 id，避免不同楼层的同名菜互相覆盖
+        name: (SCHOOL.name || '本校') + ' · ' + base,
+        file: './packs/' + file,
+        place: 'canteen',
+        attribution: (SCHOOL.name || '本校') + '食堂菜单（本校数据）'
+      };
+      try {
+        const r = await importPack(pack);
+        S.custom.forEach((c) => { if (c.pack === pack.id) c.school = true; });
+        loaded.push(file);
+        added += r.added; updated += r.updated; floors++;
+      } catch (e) {
+        failed++;
+        toast('这一层没载入成功（' + file + '）：' + (e.message || e));
+      }
     }
+    if (!floors) return null;
+    S.schoolLoaded = loaded;
+    save();
+    return { added: added, updated: updated, floors: floors, failed: failed };
   }
 
   /* ================= 校园菜单包 ================= */
@@ -1767,6 +1839,9 @@
         packName: stripMarkup(pack.name, 60),
         source: stripMarkup(pack.attribution || '', 200)
       });
+      // 楼层优先用菜品自己的 f，其次用包级 floor（一层楼一个包，不用每道菜重复写）
+      const packFloor = stripMarkup(data.floor || pack.floor || '', 12);
+      if (!dish.f && packFloor) dish.f = packFloor;
       const exist = S.custom.find((x) => x.id === dish.id);
       if (exist) { Object.assign(exist, dish); updated++; } else { S.custom.push(dish); added++; }
     });
@@ -1871,7 +1946,13 @@
         : '<p class="hint" style="margin:0 0 8px"><b>本校菜单尚未录入。</b>' +
           '现在抽签用的是内置的 127 道全国通用参考菜（结果会标「通用参考」），不是你们食堂的真实菜价。</p>');
 
-    box.innerHTML = status +
+    const floorLine = (SCHOOL.floors && SCHOOL.floors.length)
+      ? '<p class="hint" style="margin:0 0 8px">楼层进度：' + SCHOOL.floors.map((f) => {
+          const n = S.custom.filter((c) => c.school && c.f === f).length;
+          return esc(f) + (n ? ' ' + n + ' 道' : ' 待录入');
+        }).join('　·　') + '</p>'
+      : '';
+    box.innerHTML = status + floorLine +
       '<div class="switchrow" style="margin-top:0"><div>' +
       '<div class="sr-label">只抽本校/我自己的菜单</div>' +
       '<div class="sr-desc">打开后忽略内置的通用参考菜，避免把参考价当成食堂实际价格</div></div>' +
@@ -2026,8 +2107,9 @@
       save();
       // 筛选行必须重绘：窗口选项是从菜品数据里生成的，载入前渲染等于没有
       renderMe(); renderFilters(); renderPackCard(); renderPick();
-      toast('已载入' + (SCHOOL.name || '本校') + '菜单 ' + r.added + ' 道，默认只抽本校的菜');
-    } else if (SCHOOL.name || SCHOOL.canteenPack) {
+      toast('已载入 ' + r.floors + ' 层共 ' + r.added + ' 道本校菜，默认只抽本校的' +
+        (r.failed ? '（有 ' + r.failed + ' 层没载入成功）' : ''));
+    } else if (SCHOOL.name || (SCHOOL.canteenPacks || []).length) {
       renderMe(); renderPackCard();
     }
   })();
