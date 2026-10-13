@@ -55,7 +55,7 @@
 
   /* ================= 状态 ================= */
   const DEFAULTS = {
-    filters: { place: 'any', budget: 20, wait: 45, cats: [], wins: [], spicy: 'any', mode: 'balance', skipRecent: true, onlyMine: false },
+    filters: { place: 'any', budget: 25, wait: 45, cats: [], wins: [], spicy: 'any', mode: 'balance', skipRecent: true, onlyMine: false },
     diet: {},
     blacklist: [],   // [{id, name}]
     history: [],     // [{id, name, price, place, meal, ts}]
@@ -422,6 +422,18 @@
 
   function showEmptyPool() {
     const fix = diagnose();
+    // 本校菜单配了却没载进来（比如断网），这时条件放宽也没用，要如实说清
+    const schoolBroken = SCHOOL.canteenPack && !schoolDishCount();
+    if (schoolBroken) {
+      resultBox.innerHTML =
+        '<div class="empty">' +
+        '<p>抽签池是空的：本校菜单好像没载入成功。</p>' +
+        '<p class="hint">请检查网络后刷新页面；如果一直这样，去「我的 → 校园菜单包」看看本校菜单的状态。</p>' +
+        '</div>';
+      resultBox.hidden = false;
+      $('#rollBtn').disabled = false;
+      return;
+    }
     resultBox.innerHTML =
       '<div class="empty">' +
       '<p>满足这些条件的菜一个都没有，条件卡太死了。</p>' +
@@ -2012,7 +2024,8 @@
       // 本校菜单进来了就默认只抽本校的，免得参考价混进来
       S.filters.onlyMine = true;
       save();
-      renderMe(); renderPackCard(); renderPick();
+      // 筛选行必须重绘：窗口选项是从菜品数据里生成的，载入前渲染等于没有
+      renderMe(); renderFilters(); renderPackCard(); renderPick();
       toast('已载入' + (SCHOOL.name || '本校') + '菜单 ' + r.added + ' 道，默认只抽本校的菜');
     } else if (SCHOOL.name || SCHOOL.canteenPack) {
       renderMe(); renderPackCard();

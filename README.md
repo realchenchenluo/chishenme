@@ -11,17 +11,20 @@
 
 **这个站点只服务我们自己学校，不涉及其他学校。**
 
-- **本校食堂菜单：尚未录入。** 现在抽签用的是内置的 **127 道全国通用参考菜**，价格和菜名都不是我们食堂的实际情况——所以结果卡上每道内置菜都会标「**通用参考**」，不会让人误当成真实菜价。
-- 内置数据只用来**占位和跑通流程**；一旦本校菜单进来，本站会默认只抽本校的菜。
-- `packs/` 里那份深圳大学的菜单包是**别的学校的数据**，只作格式示例，不会自动载入，也不会参与抽签（结果卡上会标出它的学校名）。
-- `school.json` 是标明「本站服务哪所学校」的地方。填上学校名和菜单包文件名之后：顶部会显示学校名，访客第一次打开就自动载入本校菜单并打上「**本校**」标记，抽签默认只在本校菜单里选。
+- **本校食堂菜单：已录入一楼 128 道菜**（`packs/canteen-f1.json`，08–12 号窗口 + 土豆泥拌饭 + 经典小吃），由窗口菜单牌拍照录入，抽签默认只从这些菜里选，结果卡上标「**本校**」并显示"去哪吃"（哪个窗口）。
+- **之前的内置食堂参考数据已删除**：`assets/data.js` 里现在只剩「外卖」的全国通用条目（标「通用参考」）。食堂这一侧 100% 是你们食堂的真实菜单。
+- 深圳大学那份示例包也已删除——本站只服务我们自己学校，不需要别的学校的数据。
+- `school.json` 是标明「本站服务哪所学校」的地方。**`name` 还空着**（填上学校名之后顶部会显示出来），`canteenPack` 已指向一楼菜单，`canteens` 记了楼层。
+- 内网/校外的同学打开链接就自动载入这份菜单，不用做任何设置。
 
-### 本校食堂数据怎么进来（拍照 → 我整理）
+### 后续窗口的照片怎么加（拍照 → 我整理）
 
 1. **拍菜单照片**：食堂窗口的菜牌、价目表、楼层指引都行。能看清菜名和价格最好；同一个窗口多拍几张没关系。顺手告诉我**食堂名/楼层/窗口名**。
 2. **发给我**：直接在对话里把照片发过来（我能读图），或者放到本机某个文件夹告诉我路径。
 3. **我生成菜单包**：按 `packs/README.md` 的格式整理成 `packs/<学校>-<食堂>.json`（菜名、价格、标签按你们实际情况写；看不清或拿不准的字段会标成推断值），并更新 `packs/index.json`。
-4. **我校启用**：在 `school.json` 里填上 `name` 和 `canteenPack`，推送后所有打开本站的同学都会自动载入，结果卡标「本校」，默认只抽本校菜。**至此内置的 127 道参考菜就不再参与抽签了。**
+4. **启用**：`school.json` 里的 `canteenPack` 指向菜单包（已指向一楼），推送后所有打开本站的同学都会自动载入，结果卡标「本校」，默认只抽本校菜。
+
+**已录入**：一楼（08 号重庆风味/烤鱼饭、09 号焗饭、10 号样样好蘸水菜、11 号成都水煮菜/五谷鱼粉/宽窄巷、12 号广东风味、土豆泥拌饭、经典小吃）。**其他楼层/食堂的照片发我就行，我按同样规矩加进去。**
 
 - 纯前端静态页面，无后端、无账号、无埋点，数据只存在你自己手机的浏览器里
 - 手机端优先设计，可以「添加到主屏幕」当 App 用
@@ -29,7 +32,7 @@
 ## 功能
 
 **抽签**
-- 内置 127 道菜：58 道食堂常见菜、44 道全国连锁外卖、25 道两边都有的
+- 食堂这一侧是**你们食堂的真实菜单**（一楼 128 道，按窗口菜单牌录入，含“去哪吃”的窗口名）；外卖那一侧内置 69 道全国通用品牌作参考（标「通用参考」）
 - 每条数据带参考价区间、等待/配送时间区间、口碑评分、口味标签、一句话点评
 - 硬筛选：场所（食堂/外卖）、预算上限、最长等待时间、菜品类型、辣度、忌口
 - 四种手气模式，决定价格/时间/口碑在概率里的权重：
@@ -121,13 +124,15 @@
 
 **怎么把你学校的录进去**：在「我的 → 我的菜单」里用批量粘贴录入（一行一个菜：`菜名, 价格, 等待分钟, 好吃度, 标签`），录完点「导出备份」拿到 JSON，在 [issue](https://github.com/realchenchenluo/chishenme/issues) 里贴上来，或者提 PR。格式和提交规矩见 [`packs/README.md`](packs/README.md)。
 
-### 为什么目前只收录了一个学校
+### 关于其他学校的食堂数据（背景，可跳过）
 
-我挨个查过 GitHub 上真实存在的食堂数据仓库（用 GitHub API 核实过存在性和许可），**能合法再分发的只有一份**：
+**我们现在用的数据是自己拍的**——菜名、价格照窗口菜单牌录入，属于自己整理的事实性信息，不涉及别人的版权，只作校内自用。
+
+下面这段是调研记录：万一以后想收录别人的数据，得先看许可。我挨个查过 GitHub 上真实存在的食堂数据仓库（用 GitHub API 核实过存在性和许可），**能合法再分发的只有一份**：
 
 | 数据 | 许可 | 能不能收录 |
 | --- | --- | --- |
-| [深圳大学南区二楼 185 道菜](https://github.com/ljunnan24-hash/recipe)（含精确价格、热量、窗口） | 数据集 CC BY 4.0，代码 MIT | **能**，已收录 |
+| [深圳大学南区二楼 185 道菜](https://github.com/ljunnan24-hash/recipe)（含精确价格、热量、窗口） | 数据集 CC BY 4.0，代码 MIT | 能（曾作为示例包收录，现已删除） |
 | [清华食堂 72 道菜](https://github.com/2UBBISH/jiaran-what-to-eat)（整理自小红书截图） | 无 License | 不能，只能给链接 |
 | [北师大 33 个档口](https://github.com/ChiHuchen/WeChat-Mini-Program-Which-ravenrant-to-choose-Meal-Picker-for-BNUer) | 无 License | 不能，只能给链接 |
 | [对外经贸 1578 行](https://github.com/seiyachan-desuyo/Cateen)（数据最全） | 无 License | 不能，只能给链接 |
@@ -135,7 +140,7 @@
 
 **没有 License 就是默认保留全部权利，署名也救不了**——这个项目是 MIT 公开部署的，打包未授权数据的风险最高。想用那几份数据，正路是去给作者开 issue 要一份书面授权。
 
-`ljunnan24-hash` 那份明确写了可以再分发，条件是署名 + 说明做过什么修改，所以这两件事都写进了 `packs/index.json` 的 `attribution` / `modified` 字段和包内说明；转换脚本 [tools/make-pack-szu.mjs](tools/make-pack-szu.mjs) 也放在仓库里，任何人都能跑一遍核对。
+
 
 ### 「去网上找评价」这条路走不通
 
@@ -262,13 +267,12 @@ npx serve .
 index.html               页面结构
 manifest.webmanifest     PWA 清单（可添加到主屏幕）
 icon.svg                 图标（也用作页面左上角的 logo，不是 emoji）
-assets/data.js           内置菜品库（127 道参考数据，含字段说明）
+assets/data.js           内置外卖参考条目（69 道全国通用品牌；食堂数据已移出，见 packs/）
 assets/geo.js            定位、109 城市离线表、高德逆地理与周边搜索、城市等级系数
 assets/coupons.js        优惠猎手页面抓取与解析
 assets/app.js            全部逻辑：筛选、加权抽签、记录、编辑器、菜单包、本地化与券的界面
 assets/style.css         样式（移动端优先 + 深色模式）
-packs/                   校园菜单包：索引 index.json、各校数据、投稿说明 README.md
-tools/make-pack-szu.mjs  深大菜单包的转换脚本（可复现，方便核对改动）
+packs/                   菜单包：index.json 索引 + canteen-f1.json（食堂一楼 128 道菜）+ 格式说明
 tools/stage-site.mjs     生成发布产物 _site/（GitHub Pages 与 Cloudflare 共用）
 .github/workflows/deploy-cloudflare.yml  可选：配了 token 后推送到 main 即自动同步到 Cloudflare
 ```
@@ -285,7 +289,7 @@ tools/stage-site.mjs     生成发布产物 _site/（GitHub Pages 与 Cloudflare
 - [MinatoAquaCrews/nonebot_plugin_what2eat](https://github.com/MinatoAquaCrews/nonebot_plugin_what2eat) — 按餐段（早/午/晚/夜宵）区分的推荐
 - [Sisyphbaous-DT-Project/astrbot_plugin_what_to_eat](https://github.com/Sisyphbaous-DT-Project/astrbot_plugin_what_to_eat) — 面向大学生的内置食物清单、冷却防刷
 - [2UBBISH/jiaran-what-to-eat](https://github.com/2UBBISH/jiaran-what-to-eat) — 众包机制参考：PR 式 `contributions/*.json` + 自动重建索引 + 冻结的入库字段契约（本站的 `packs/` 借鉴了这个形态）
-- [ljunnan24-hash/recipe](https://github.com/ljunnan24-hash/recipe) — 深圳大学南区二楼食堂菜谱（CC BY 4.0），本站收录的第一个菜单包
+- [ljunnan24-hash/recipe](https://github.com/ljunnan24-hash/recipe) — 深圳大学南区二楼食堂菜谱（CC BY 4.0）。本站早期用它跑通过菜单包流程，现已删除
 
 这些项目里普遍缺的三件事正好是这里想补的：**没有加权**（价格、时间、口碑不进概率）、**不防重复**、**没有可以改成自己学校的结构化数据**。
 

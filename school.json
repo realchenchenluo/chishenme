@@ -18,7 +18,9 @@
     "拿到本校菜单后（例如拍照录入）：把数据做成 packs/xxx.json，在这里填上文件名即可。"
   ],
   "name": "",
-  "canteenPack": "",
-  "canteens": [],
+  "canteenPack": "canteen-f1.json",
+  "canteens": [
+    "一楼"
+  ],
   "amapKey": ""
 }
