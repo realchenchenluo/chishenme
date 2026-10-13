@@ -64,13 +64,21 @@
           <button class="btn" id="againBtn">换一个</button>
           <button class="btn primary" id="acceptBtn">就吃这个</button>
         </div>
+
+        <!-- 抽到外卖时单独给一块：领券要显眼，不能塞在一排小按钮里 -->
+        <div id="couponBox" hidden>
+          <button class="btn wide coupon-cta" id="couponBtn">
+            <span class="cta-main">领外卖券</span>
+            <span class="cta-sub">美团 / 淘宝闪购 · 先找店，再领券</span>
+          </button>
+        </div>
+
         <div class="actions-2 many" id="resultActions2" hidden>
           <button class="btn tiny" id="shareBtn">发给同学</button>
           <button class="btn tiny" id="likeBtn">好吃</button>
           <button class="btn tiny" id="dislikeBtn">踩雷</button>
           <button class="btn tiny" id="blockBtn">别再推</button>
           <button class="btn tiny" id="patchBtn">改价</button>
-          <button class="btn tiny" id="couponBtn" hidden>外卖券</button>
         </div>
         <p class="hint" id="poolInfo" style="text-align:center"></p>
       </div>
@@ -165,7 +173,7 @@
         <div class="about">
           <p>内置菜品的价格、等待时间都是<b>全国高校的参考值</b>，各地差异很大，请以你学校食堂和外卖 App 的实际标价为准。看到不对的，点结果卡上的「改价」，改完只影响你自己的手机。</p>
           <p>「好吃度」是综合口碑的参考分，不是官方评分；你可以用「好吃」「踩雷」两个按钮调教它，抽签概率会跟着变。</p>
-          <p>抽签算法：先按条件硬筛，再按 <code>口碑 × 价格 × 等待时间 × 新鲜度</code> 加权随机。最近吃过的会明显降权，标记「别再推」的永远不会再出现。</p>
+          <p>抽签算法：先按条件硬筛，再按 <code>口碑 × 价格 × 等待时间 × 新鲜度</code> 加权随机。最近吃过的会明显降权，同一次使用里刚抽到过的也会大幅降权（所以不会连着抽到同一个），标记「别再推」的永远不会再出现。</p>
           <p>所有数据都保存在浏览器本地（localStorage），不上传任何服务器。换手机请先「导出备份」。</p>
           <p>参考了 GitHub 上同类项目的做法：加权抽签、重复抑制、黑名单、按预算筛选。校园菜单包的数据来源与许可写在每个包的说明里。</p>
         </div>

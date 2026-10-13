@@ -55,7 +55,7 @@
 
   /* ================= 状态 ================= */
   const DEFAULTS = {
-    filters: { place: 'any', budget: 20, wait: 30, cats: [], wins: [], spicy: 'any', mode: 'balance', skipRecent: true, onlyMine: false },
+    filters: { place: 'any', budget: 20, wait: 45, cats: [], wins: [], spicy: 'any', mode: 'balance', skipRecent: true, onlyMine: false },
     diet: {},
     blacklist: [],   // [{id, name}]
     history: [],     // [{id, name, price, place, meal, ts}]
@@ -77,6 +77,7 @@
   let S = load();
   let rolling = false;
   let sessionSeen = new Set();   // 本轮会话已经抽出来过的（「换一个」用）
+  let sessionShown = [];         // 本次使用里"展示过"的菜（最新的在前）——防止连抽到同一个
   let current = null;            // 当前结果 {d, offer}
 
   function load() {
@@ -239,9 +240,13 @@
     const price = clamp(1.15 - 0.7 * (mid(offer.price) / budget), 0.25, 1.5);
     const time = clamp(1.15 - 0.7 * (mid(offer.wait) / waitCap), 0.25, 1.5);
     const fresh = 1 / (1 + FRESH_HALFLIFE * recentCount(d.id));
+    // 同一次使用里刚抽到过的（哪怕没点「就吃这个」）也大幅降权：
+    // 这才是"连着抽到同一个"的主因——之前的防重复只认已记录的餐
+    const k = sessionShown.indexOf(d.id);
+    const shownW = k < 0 ? 1 : (k === 0 ? 0.08 : k === 1 ? 0.22 : 0.45);
     const personal = clamp(1 + 0.25 * ((S.likes[d.id] || 0) - (S.dislikes[d.id] || 0)), 0.35, 2.2);
     return Math.pow(taste, e.taste) * Math.pow(price, e.price) *
-           Math.pow(time, e.time) * fresh * personal;
+           Math.pow(time, e.time) * fresh * personal * shownW;
   }
 
   function weightedPick(pool) {
@@ -327,7 +332,9 @@
     if (t) parts.push('外卖 ' + t);
     const mine = pool.filter((x) => x.d.school).length;
     if (mine) parts.push('本校 ' + mine);
-    return head + '当前 ' + pool.length + ' 个候选（' + parts.join(' · ') + '）';
+    // 候选太少就容易重复，直接把原因和出路说出来
+    const thin = pool.length < 20 ? '，候选偏少容易重复，放宽预算或等待会更多' : '';
+    return head + '当前 ' + pool.length + ' 个候选（' + parts.join(' · ') + '）' + thin;
   }
 
   function doRoll(isAgain) {
@@ -400,10 +407,13 @@
     resultBox.hidden = false;
     $('#resultActions').hidden = false;
     $('#resultActions2').hidden = false;
-    $('#couponBtn').hidden = o.place !== 'takeout';   // 抽到外卖才提示领券
+    $('#couponBox').hidden = o.place !== 'takeout';   // 抽到外卖才提示领券（放到主按钮下面，显眼）
     $('#rollBtn').textContent = '再抽一次';
     $('#rollBtn').disabled = false;
     $('#poolInfo').textContent = poolSummary();
+
+    // 记进本次会话的"已展示"清单（最多留最近 6 个）
+    sessionShown = [d.id].concat(sessionShown.filter((x) => x !== d.id)).slice(0, 6);
 
     const r = slot.getBoundingClientRect();
     burst(r.left + r.width / 2, r.top + 40);

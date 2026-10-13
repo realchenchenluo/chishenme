@@ -181,6 +181,16 @@ body {
 .actions-2.many { gap: 6px; justify-content: center; }
 .actions-2.many > .btn { flex: 0 0 auto; white-space: nowrap; }
 
+/* 外卖券入口：抽到外卖时单独一块，用虚线描边 + 品牌色，明显但不跟「就吃这个」抢 */
+.coupon-cta {
+  flex-direction: column; gap: 1px; margin-top: 8px; padding: 11px 14px;
+  background: var(--brand-soft); border: 1.5px dashed var(--brand);
+  color: var(--brand); min-height: 52px;
+}
+.coupon-cta .cta-main { font-size: 15px; font-weight: 700; letter-spacing: .3px; }
+.coupon-cta .cta-sub { font-size: 11.5px; font-weight: 500; opacity: .8; }
+.coupon-cta:active { transform: scale(.98); }
+
 /* ---------- 筛选 ---------- */
 .frow { margin-bottom: 12px; }
 .frow:last-child { margin-bottom: 0; }
