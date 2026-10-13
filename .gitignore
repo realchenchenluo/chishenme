@@ -6,3 +6,6 @@ node_modules/
 *.log
 .DS_Store
 Thumbs.db
+
+# 从菜单包导出的核对表（派生文件，不进仓库）
+菜单核对表.md

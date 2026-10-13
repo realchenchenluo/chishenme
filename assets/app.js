@@ -268,27 +268,45 @@
   // 说明「为什么是它」，让抽签结果看起来有依据而不是瞎指。
   // 用候选内部的分位数而不是绝对值，这样几乎每次都能给出一句人话。
   function whyText(d, offer, pool) {
-    const bits = [];
     const F = S.filters;
-    if (F.mode === 'taste') bits.push('「只吃好的」模式命中高口碑');
-    if (F.mode === 'cheap') bits.push('「省钱优先」模式挑了便宜货');
-    if (F.mode === 'random') bits.push('盲盒模式，纯看运气');
-
-    const rankBy = (arr, v, higherIsBetter) => {
-      const better = arr.filter((x) => (higherIsBetter ? x > v : x < v)).length;
-      return better / Math.max(arr.length, 1);
-    };
+    const price = mid(offer.price), wait = mid(offer.wait);
     const rs = pool.map((x) => x.d.r);
     const ps = pool.map((x) => mid(x.offer.price));
     const ws = pool.map((x) => mid(x.offer.wait));
 
-    if (rankBy(rs, d.r, true) <= 0.2) bits.push('口碑在候选里排前 20%');
-    if (rankBy(ps, mid(offer.price), false) <= 0.25) bits.push('价钱算便宜的');
-    if (rankBy(ws, mid(offer.wait), false) <= 0.25) bits.push('等的时间不长');
-    if (mid(offer.price) >= ps.sort((a, b) => b - a)[0] - 0.5 && pool.length > 4) bits.push('今天稍微奢侈一点');
+    // 关键：只有候选之间"确实存在差别"时，才能说"排前百分之几"。
+    // 否则会退化成一句废话——比如本校菜单的评分都是 4.2 占位值时，
+    // 每道菜都会命中"口碑排前 20%"，那等于乱说。
+    const spread = (arr) => Math.max.apply(null, arr) - Math.min.apply(null, arr);
+    const rankBy = (arr, v, higherIsBetter) =>
+      arr.filter((x) => (higherIsBetter ? x > v : x < v)).length / Math.max(arr.length, 1);
+    const bigR = spread(rs) > 0.15;   // 评分有差异
+    const bigP = spread(ps) > 1;      // 价格差 1 元以上
+    const bigW = spread(ws) > 1;      // 等待差 1 分钟以上
+
+    const bits = [];
+    if (F.mode === 'taste' && bigR) bits.push('「只吃好的」模式挑了口碑高的');
+    if (F.mode === 'cheap' && bigP) bits.push('「省钱优先」模式挑了便宜货');
+    if (F.mode === 'random') bits.push('盲盒模式，纯看运气');
+
+    if (bigR && rankBy(rs, d.r, true) <= 0.2) bits.push('口碑在候选里排前 20%');
+    if (bigP && rankBy(ps, price, false) <= 0.25) bits.push('价钱算便宜的');
+    if (bigP && rankBy(ps, price, true) <= 0.1 && pool.length > 8) bits.push('今天稍微奢侈一点');
+    if (bigW && rankBy(ws, wait, false) <= 0.25) bits.push('等的时间不长');
+    if (bigW && rankBy(ws, wait, true) <= 0.1 && pool.length > 8) bits.push('这家要等久一点');
     if (S.likes[d.id]) bits.push('你之前点过赞');
     if (recentCount(d.id) === 0 && S.history.length > 3) bits.push('最近没吃过');
-    if (!bits.length) bits.push('综合价格、等待和口碑后抽中的');
+
+    if (!bits.length) {
+      // 兜底也要如实：把"哪些条件真的在起作用"说清楚
+      const varied = [];
+      if (bigP) varied.push('价格');
+      if (bigW) varied.push('等待时间');
+      if (bigR) varied.push('口碑');
+      bits.push(varied.length
+        ? '综合' + varied.join('和') + '随机挑的'
+        : '候选之间各项条件都差不多，随机挑的');
+    }
     return bits.slice(0, 3).join(' · ');
   }
 
